@@ -1,0 +1,23 @@
+
+main:		jsr pc, OddEven
+
+
+
+OddEven:	mov r4, -(sp)
+			mov r5, -(sp)
+			clr r4
+			mov @#CurStep,	r5
+			div #2,	r4
+			cmp r5, #0
+			bne .+16			;br odd2
+			mov (sp)+,	r5
+			mov (sp)+,	r4
+			mov #1,	@#Flag
+			rts pc
+			mov (sp)+,	r5 		;odd2:
+			mov (sp)+,	r4
+			mov #0,	@#Flag
+			rts pc
+
+Flag: .word 0
+CurStep:	.word 1

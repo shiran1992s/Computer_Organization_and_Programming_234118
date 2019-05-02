@@ -1,0 +1,2727 @@
+tks = 177560
+tkb = 177562
+tps = 177564
+tpb = 177566
+cls = 177546
+
+cr = 15
+lf = 12
+bs = 10
+
+.= torg+20	;	iot
+	.word print
+	.word 300
+	
+.= torg+30	;	emt
+	.word emtrap
+	.word 340 		;priority 7
+
+.= torg+60	;	keyboard
+	.word echo
+	.word 200
+
+.= torg+100	;	clock
+	.word clock
+	.word 300
+
+
+.= torg + 3000
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@     main    @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+main:		mov pc, sp
+			mov #101, @#tks
+			mov #100, @#cls
+			emt 0
+
+W:			cmp @#gameON, #1
+			bne .-6
+			mov #Board, -(sp)
+			mov @#CurPlay, -(sp)
+			tst -(sp)				;place for result
+			jsr pc, checkWin
+			cmp (sp)+, #1
+			beq ENDGAME
+			cmp (sp)+, (sp)+
+			jsr pc, noMoves
+			clr @#NumMoves			;conPlay
+			cmp @#Player,	#1
+			bne .+20				;bne pl2
+			cmp @#firstP,	#'c
+			beq .+36				;beq compWait
+			jsr pc, timetest
+			br W
+			cmp @#Player,	#2		;pl2
+			bne W
+			cmp @#secondP,	#'c
+			beq .+10				;beq compWait
+			jsr pc, timetest
+			br W
+			
+			mov r1, -(sp)				;compWait:
+			mov r0, -(sp)			
+			clr r0
+			mov Board(r0), BoardCP(r0)	;loop:	
+			add #2, r0
+			cmp r0, #176 					;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	.-16					;bmi loop:
+			mov #1, @#Steps			
+			jsr pc, compMov
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			mov #-777, -(sp)
+			jsr pc, compTime
+			add #2, @#Steps			;StepLoop
+			jsr pc, compMov			
+			mov @#SrcPos, 4(sp)
+			mov @#DstPos, 2(sp)
+			jsr pc, compTime
+			jmp .-32				;jmp StepLoop
+			
+ENDGAME:	jmp .+320	;jmp endGame			
+			
+endComp:	
+			mov (sp)+, @#DstPos
+			mov (sp)+, @#SrcPos	
+			clr r0
+			tst @#gameON
+			beq W
+			mov BoardCP(r0), Board(r0)	;loop:	
+			add #2, r0
+			cmp r0, #176 					;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	.-16					;bmi loop:
+			mov #Board, -(sp)
+			jsr r5, movPiece
+			.word SrcPos, DstPos
+			tst (sp)+	
+			
+			clr r0				
+			clr r1
+			cmp @#Player, #1
+			bne .+24						;bne strLoop:	(Black)
+			movb strMsg1(r1), r0			;strLoop:	(White)
+			jsr pc, putc
+			inc r1
+			cmp r1, #6
+			bne .-16						;bne strLoop:	
+			br .+22							;br ret1
+			movb strMsg2(r1), r0			;strLoop:	(Black)
+			jsr pc, putc
+			inc r1
+			cmp r1, #6
+			bne .-16						;bne strLoop:
+			clr r0							;ret1
+			clr r1
+			
+			jsr pc, Movsec
+			mov @#Player, @#CurPlay
+			jsr pc, SwapPly
+			mov @#CurPlay, @#Player
+			jsr pc, Layout
+			mov (sp)+, r0
+			mov (sp)+, r1
+			jmp W		
+
+noMoves:	cmp @#Player, #0
+			bne .+4
+			rts pc
+			mov @#Player, @#CurPlay
+			jsr pc, NumOfMov
+			cmp @#NumMoves,#0
+			bne .+54						;bne conPlay
+			clr @#NumMoves
+			clr r0
+			clr r1
+			movb outOfMov(r1), r0			;stopLopW:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, outOfMov(r1)		
+			bne .-20						;bne stopLopW
+			mov @#Player, @#CurPlay
+			jsr pc, SwapPly
+			mov @#CurPlay, @#Player
+			clr @#NumMoves					;conPlay
+			rts pc							
+			
+			;--------------END GAME								
+			cmp (sp)+, (sp)+		;ENDGAME
+			mov r4, -(sp)					;save r4 because CalcWP needs it
+			mov #Board, -(sp)				;Preperations For the CalcWP
+			mov @#CurPlay,-(sp)				;
+			jsr pc, calcWP
+			cmp (sp)+, (sp)+
+			mov r4, @#WinParam
+			mov (sp)+, r4
+			mov r1, -(sp)
+			mov r0, -(sp)
+			clr r0
+			clr r1
+			tst @#WinParam
+			beq .+210
+			cmp @#Player, #1
+			beq .+26						;beq stopLopW	
+			movb stopMsg2(r1), r0			;stopLopB
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg2(r1)
+			bne .-20						;bne stopLopB
+			br .+24		
+			movb stopMsg1(r1), r0			;stopLopW:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg1(r1)		
+			bne .-20						;bne stopLopW
+			jsr pc, asc2deci
+			clr r0
+			clr r1
+			cmp @#Player, #1
+			bne .+34						;bne black11
+			tst @#WinParam
+			bmi .+60					
+			movb stopMsg3(r1), r0			;stopLopP:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg3(r1)
+			bne .-20						;bne stopLopP
+			br .+102						;br end
+			tst @#WinParam					;bl black11
+			bpl .+26					
+			movb stopMsg3(r1), r0			;stopLopP:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg3(r1)
+			bne .-20						;bne stopLopP
+			br .+56							;br end
+			movb stopMsg4(r1), r0			;stopLopA:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg4(r1)		
+			bne .-20						;bne stopLopA
+			br .+24							;br end
+			movb stopMsg5(r1), r0			;stopLopT:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg5(r1)
+			bne .-20						;bne stopLopT					
+			mov #cr, r0						;end
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			clr @#Player
+			clr @#CurPlay
+			clr @#Steps
+			clr @#firstP
+			clr @#secondP
+			clr @#timeFP
+			clr @#timeSP
+			mov (sp)+, r0
+			mov (sp)+, r1
+			mov #0, gameON
+			jmp W
+			
+			
+
+.even
+BoardCP: 		.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0		
+				
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@     compTime    @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;checks if the current count passes the limit of time allowed for it
+;the function compares timeFP/timeSP (depending if the player is 1/2) multiplied by rate
+;is bigger then the current count.
+;time*P holds the seconds as a value when mul by rate you recive the value for the given rate
+;set in the machine
+;the comparison is set to indicate the time out here 
+					
+compTime:	
+			cmp @#Player,	#1
+			bne .+10				;bne calcP2
+			mov @#timeFP, r1
+			br .+6					;br con1
+			mov @#timeSP, r1		;calcP2
+			mul @#rate, r1			;con1
+			sub @#count, r1			
+			cmp #0, r1			;~~this is the exit compare of the 
+		;recurtion, can be modifies to leave 1 sec or w/e we want
+			bge .+4					;branch to endCycle
+			rts pc
+			
+			cmp (sp)+, #-777		;endCycle
+			bne .-4
+			mov #endComp, -(sp)
+			rts pc
+			
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@     emt Traps    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;there are 2 traps used only for the intro message and time calculation (for time command)
+;because they have priority over the clock
+
+emtrap:		mov (sp), -(sp)
+			sub #2, (sp)
+			mov @0(sp), (sp)
+			bic #177400, (sp)
+			asl (sp)
+			add #emtable, (sp)
+			mov @0(sp), (sp)
+			jmp @(sp)+
+			
+emtable:	.word emt00		;intro message
+			.word emt01		;time calculation for the function cmdTime
+			
+emt00:		mov r0, -(sp)		
+			mov r1, -(sp)
+			clr r1
+			movb introMSG(r1), r0			;introL:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, introMSG(r1)	
+			bne .-20						;bne introL:
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #'$, r0
+			jsr pc, putc
+			mov #40, r0
+			jsr pc, putc
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rti
+				
+	
+emt01:		mov r0, -(sp)
+			mov r1, -(sp)
+			mov r2, -(sp)
+			mov r3, -(sp)
+			mov r4, -(sp)
+			mov r5, -(sp)
+			
+			clr r3
+			cmp @#Player, #1
+			bne .+10
+			mov @#timeFP, r2	;current player Time (given in start)
+			br .+6
+			mov @#timeSP, r2	;current player Time (given in start)
+			mul @#rate, r2		;Time*rate (= time balanced for the clock)
+			sub @#count, r3		;(Time*rate)-count (count tickes per clock)
+			div @#rate, r2		;the quotient of (Time*rate-count)/rate is
+			mov r2, r0			;seconds
+			cmp #99., r2		;checks if there are 3 digit seconds
+			bgt .+26			;to 10's
+			mov r2, r5			;
+			clr r4
+			div #100., r4
+			mov r4, r0
+			add #'0, r0
+			jsr pc, putc
+			mov r5, r2
+			cmp #9., r2			;10's
+			bgt .+26			;to 1's
+			mov r2, r5
+			clr r4
+			div #10., r4
+			mov r4, r0
+			add #'0, r0
+			jsr pc, putc
+			mov r5, r2
+			mov r2, r0			;1's
+			add #'0, r0
+			jsr pc, putc
+			mov #'., r0
+			jsr pc, putc
+			mul #10, r3
+			clr r2
+			div @#rate, r2
+			mov r2, r0
+			add #'0, r0
+			jsr pc, putc
+			
+			mov (sp)+, r5
+			mov (sp)+, r4
+			mov (sp)+, r3
+			mov (sp)+, r2
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rti	
+
+timeFP:		.word 0
+timeSP:		.word 0	
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@   Legal command   @@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;when pressing enter this function checks the legality of the last line inputed
+;if none of the letters match the function send the pc to illegal function
+;otherwise it sends the pc to the relevant command function
+			
+cmdLegal:	mov r0, -(sp)
+			mov #command, r0
+			cmpb #'t, (r0)			;
+			beq .+54				;beq jmp cmdTime
+			cmpb #'m, (r0) 			;
+			beq .+52				;beq jmp cmdMove
+			cmpb #'s, (r0)			;
+			bne illegal				;
+			add #2, r0				;
+			cmpb #'t, (r0)			;
+			bne illegal				;
+			add #2, r0				;	
+			cmpb #'a, (r0)			;
+			beq .+24				;beq jmp cmdStart
+			cmpb #'o , (r0)			;
+			beq .+22				;beq jmp cmdStop
+			jmp illegal
+			
+			
+			jmp cmdTime
+			jmp cmdMove
+			jmp cmdStart
+			jmp cmdStop
+			
+;the illegal function prints the relevant message and returns the stack to the recived status
+;and the pc back to the main
+
+illegal:	clr r0
+			mov r1, -(sp)
+			clr r1
+			movb illgMsg(r1), r0			;illgLoop:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, illgMsg(r1)
+			bne .-20						;bne illgLoop:
+			clr r0
+			clr r1
+			movb command(r1), r0			;ilgCmd:
+			jsr pc, putc
+			inc r1
+			cmpb #cr, command(r1)
+			bne .-20						;bne ilgCmd:
+			clr r0
+			clr r1
+			movb illgMsgE(r1), r0			;illgLoo2:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, illgMsgE(r1)
+			bne .-20						;bne illgLoo2:
+			jsr pc, putc
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@     time command    @@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+
+;if the input is legal the function will print the relevant message with the 
+;calculation of time by (timeXP*rate-count) only if the gameON flag has the value 1
+
+			mov (sp)+, r1		;ilegPrep2
+			jmp illegal	
+
+cmdTime:	mov r1, -(sp)
+			add #2, r0
+			cmpb #'i, (r0)
+			bne .-20			;bne ilegPrep2
+			add #2, r0
+			cmpb #'m, (r0)
+			bne .-32			;bne ilegPrep2
+			add #2, r0
+			cmpb #'e, (r0)
+			bne .-44			;bne ilegPrep2
+			add #2, r0
+			cmpb #40, (r0)
+			beq .+14
+			cmpb #cr, (r0)
+			bne .-64			;bne ilegPrep2
+			tst @#gameON
+			beq .-72			;beq ilegPrep2
+			clr r0
+			clr r1
+			movb timeMsg1(r1), r0			;timeLopA
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, timeMsg1(r1)		
+			bne .-20						;bne timeLopA
+			
+			emt 1							;time claculation (priority 7)
+			
+			clr r0
+			clr r1
+			movb timeMsg2(r1), r0			;timeLopB
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, timeMsg2(r1)		
+			bne .-20						;bne timeLopB
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			
+			
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+				
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@   move command   @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+
+;if the gameON flag is 1 and the given line is legal this function will send the DstPos and SrcPos
+;given by the user to be checked and executed by the function movHuman
+;when the move is made legally the function will print the time took to execute and the 
+;updated board
+
+cmdMove:	mov r1, -(sp)
+			tst @#gameON
+			beq ilegPrep
+			add #2, r0
+			cmpb #'o, (r0)
+			bne ilegPrep
+			add #2, r0
+			cmpb #'v, (r0)
+			bne ilegPrep
+			add #2, r0
+			cmpb #'e, (r0)
+			bne ilegPrep
+			add #2, r0
+			cmpb #40, (r0)
+			bne ilegPrep
+			add #2, r0
+			cmpb #40, (r0)
+			beq .-12
+			mov #firstNum, r1
+			jmp arg1
+arg1Ret:	mov @#firstNum, @#SrcPos
+			add #2, r0
+			cmpb #40, (r0)
+			beq .-10
+			clr r1
+			mov #secndNum, r1
+			br arg2
+arg2Ret:	mov @#secndNum, @#DstPos
+			jsr pc, movHuman
+			
+			
+			clr r0				
+			clr r1
+			cmp @#Player, #1
+			bne .+24						;bne strLoop:	(Black)
+			movb strMsg1(r1), r0			;strLoop:	(White)
+			jsr pc, putc
+			inc r1
+			cmp r1, #6
+			bne .-16						;bne strLoop:	
+			br .+22							;br ret1
+			movb strMsg2(r1), r0			;strLoop:	(Black)
+			jsr pc, putc
+			inc r1
+			cmp r1, #6
+			bne .-16						;bne strLoop:
+			clr r0							;ret1
+			clr r1
+			jsr pc, Movsec					;calculation the time to execute the move
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr r5, movPiece				;moving piece by given src and dst  
+			.word SrcPos, DstPos
+			tst (sp)+
+			mov (sp)+, r5
+			mov #Board, -(sp)
+			mov @#CurPlay, -(sp)
+			tst -(sp)				;place for result
+			jsr pc, checkWin		;
+			cmp (sp)+, #1			;if there is a win condition the game will end
+			beq .+36
+			cmp (sp)+, (sp)+			
+			jsr pc, SwapPly			;switching the player before returning to the main
+			mov @#CurPlay, @#Player	;
+			jsr pc, Layout			;prints the updated board
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc					;returns to main
+			
+ilegPrep:	mov (sp)+, r1
+			jmp illegal
+			
+			
+arg2:		cmpb (r0), #'7
+			bgt ilegPrep
+			cmpb (r0), #'0
+			blt ilegPrep
+			mov (r0), (r1)		;ascii value to #secndNum[0]
+			mov r1, -(sp)		;stack = #secndNum
+			mov (r1), r1		;r1 = @#secndNum
+			sub #60, r1			;x = @#secndNum -60
+			mul #10, r1			;x*=10
+			mov r1, @(sp)		;@#secndNum = x
+			mov (sp)+, r1		;r1 = #secndNum
+			add #2, r0
+			cmpb (r0), #'7
+			bgt ilegPrep
+			cmpb (r0), #'0
+			blt ilegPrep
+			add (r0), (r1)		;r1+=ascii value
+			mov r1, -(sp)		;stack = #secndNum
+			mov (r1), r1		;r1=@#secndNum
+			sub #60, r1			;r1-=60
+			mov r1, @(sp)		;#secndNum = r1
+			mov (sp)+, r1		;r1 = #secndNum
+			add #2, r0
+			cmpb #40, (r0)
+			beq arg2Ret
+			cmpb #cr, (r0)
+			beq arg2Ret
+			jmp ilegPrep
+			
+arg1:		cmpb (r0), #'7
+			bgt ilegPrep
+			cmpb (r0), #'0
+			blt ilegPrep
+			mov (r0), (r1)		;ascii value to #firstNum[0]
+			mov r1, -(sp)		;stack = #firstNum
+			mov (r1), r1		;r1 = @#firstNum
+			sub #60, r1			;x = @#firstNum -60
+			mul #10, r1			;x*=10
+			mov r1, @(sp)		;@#firstNum = x
+			mov (sp)+, r1		;stack = r1
+			add #2, r0
+			cmpb (r0), #'7
+			bgt ilegPrep
+			cmpb (r0), #'0
+			blt ilegPrep
+			add (r0), (r1)
+			mov r1, -(sp)
+			mov (r1), r1
+			sub #60, r1
+			mov r1, @(sp)
+			mov (sp)+, r1
+			add #2, r0
+			cmpb #40, (r0)
+			bne .+6
+			jmp arg1Ret
+			jmp ilegPrep
+			
+Movsec:		cmp @#Player,	#1
+			bne .+20				;bne checkSP		
+			cmp @#firstP,	#'c
+			bne .+26				;bne ret2
+			jsr pc, compLoop
+			br .+24					;br over ret2
+			cmp @#secondP,	#'c		;checkSP
+			bne .+10				;bne ret2
+			jsr pc, compLoop
+			br .+6
+			jsr pc, humLoop			;ret2
+			clr r1
+			clr r0
+			movb moveMsg1(r1), r0			;LopM
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, moveMsg1(r1)
+			bne .-20						;bne LopM
+			
+			mov r2, -(sp)			
+			mov r3, -(sp)
+			clr r2	
+			mov #40, r0
+			jsr pc, putc
+			mov @#count, r1
+			clr r0
+			div @#rate, r0
+			add #'0, r0
+			mov r0, r3
+			cmpb r3, #'9		;numChk1
+			bgt .+14			;bgt there
+			cmpb r3, #'0
+			blt .+6				;blt there
+			jmp .+16			;jmp legitNum
+			inc r2				;there
+			sub #12, r3
+			jmp .-26			;jmp numChk1
+			cmpb r2, #'9		;legitNum
+			bgt	.+22			;bgt gap11
+			cmpb r2, #'0
+			blt .+14			;blt gap11
+			mov r2, r0
+			add #'0, r0			
+			jsr pc, putc
+			mov r3, r0			;gap11
+			jsr pc, putc
+			mov #'., r0
+			jsr pc, putc
+			mov r1, r0
+			clr r1
+			mul #10, r0
+			div @#rate, r0
+			add #'0, r0
+			jsr pc, putc
+			mov (sp)+, r3
+			mov (sp)+, r2
+			
+			clr r0
+			clr r1
+			movb timeMsg2(r1), r0			;LopM2
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, timeMsg2(r1)
+			bne .-20						;bne LopM2
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			rts pc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@   stop command   @@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+
+;if the gameON is 1 and the line is legal the command will print the relevant message 
+;calculation the WP for the current player and by the value of it (pos/neg) will declare
+;the winner of the game (current player / opponent)
+
+cmdStop:	tst @#gameON
+			beq .+34			;beq jmp
+			add #2, r0
+			cmpb #'p ,(r0)
+			bne .+22			;to jmp
+			add #2, r0
+			cmpb #40 ,(r0)
+			beq .+14			;beq gap4
+			cmpb #cr ,(r0)
+			beq .+6				;beq gap4
+			jmp midIllg			; jmp
+			clr r0				;gap4
+			mov r1, -(sp)
+			clr r1
+calc:		mov r4, -(sp)					;save r4 because CalcWP needs it
+			mov #Board, -(sp)				;Preperations For the CalcWP
+			mov @#CurPlay,-(sp)				;
+			jsr pc, calcWP
+			cmp (sp)+, (sp)+
+			mov r4, @#WinParam
+			mov (sp)+, r4
+			clr r0
+			clr r1
+			tst @#WinParam
+			beq stopLopT
+			cmp @#Player, #1
+			beq .+26						;beq stopLopW	
+			movb stopMsg2(r1), r0			;stopLopB
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg2(r1)
+			bne .-20						;bne stopLopB
+			br .+24		
+			movb stopMsg1(r1), r0			;stopLopW:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg1(r1)		
+			bne .-20						;bne stopLopW
+			jsr pc, asc2deci
+			clr r0
+			clr r1
+			cmp @#Player, #1
+			bne .+34						;bne black11
+			tst @#WinParam
+			bmi stopLopA					
+			movb stopMsg3(r1), r0			;stopLopP:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg3(r1)
+			bne .-20						;bne stopLopP
+			br end
+			tst @#WinParam					;bl black11
+			bpl stopLopA					
+			movb stopMsg3(r1), r0			;stopLopP:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg3(r1)
+			bne .-20						;bne stopLopP
+			br end
+stopLopA:	movb stopMsg4(r1), r0			;stopLopA:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg4(r1)		
+			bne .-20						;bne stopLopA
+			br end
+stopLopT:	movb stopMsg5(r1), r0			;stopLopT:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, stopMsg5(r1)
+			bne .-20						;bne stopLopT					
+end:		mov #cr, r0						;------------
+			jsr pc, putc					;here the game stats are reset
+			mov #lf, r0						;and the gameON is changed to 0
+			jsr pc, putc					;
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			clr @#Player
+			clr @#CurPlay
+			clr @#Steps
+			clr @#firstP
+			clr @#secondP
+			clr @#timeFP
+			clr @#timeSP
+			mov (sp)+, r1
+			mov (sp)+, r0
+			mov #0, @#gameON
+			rts pc
+
+;helping function, calculates the value of WP given in octal value
+;to an ascii decimal number
+asc2deci:	mov r2, -(sp)
+			mov r3, -(sp)
+			clr r3				
+			mov @#WinParam, r2 	
+			tst r2				   
+			bge .+14			
+			mov #'-, r0			
+			jsr pc, putc
+			neg r2
+			mov r2, r3
+			clr r2
+			div #10, r2
+			movb r2, r0
+			add #'0, r0
+			jsr pc, putc
+			movb r3, r0
+			add #'0, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov (sp)+, r3
+			mov (sp)+, r2
+			rts pc
+			
+			
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@   start command   @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;if the gameON is 0 and the line is legal this function will start a game,
+;fill the correct value of seconds given in the first and second argument 
+;to the correct player for later calculations (tracking the time left and so on)
+;and print the relevant message and a full starting board			
+
+cmdStart:	cmp @#gameON, #1
+			beq midIllg			
+			add #2, r0
+			cmpb #'r, (r0)
+			bne midIllg
+			add #2, r0
+			cmpb #'t, (r0)
+			bne midIllg
+			add #2, r0
+			cmpb #40, (r0)
+			bne midIllg
+			add #2, r0
+			cmpb #40, (r0)		;until here checks the letters of the word start
+			beq .-12			;recives as many spaces as wanted in a row
+			cmpb #'h, (r0)		;checks a correct h/c input		
+			beq frstPly			;fills the label frstPly if h or calB
+			cmpb #'c, (r0)
+			beq frstPly
+			bne midIllg
+frstRet:	add #2, r0			;mandatory space
+			cmpb #40, (r0)	
+			bne midIllg
+			add #2, r0
+			cmpb #40, (r0)
+			beq .-12			;recives as many spaces as wanted in a row
+			mov r1, -(sp)
+			mov #firstNum, r1	;the space for the ascii number of the first players time
+			br numChk			;checks legality of the first number
+numRet:		mov #'/, (r1)
+			mov (sp)+, r1
+			add #2, r0
+			cmpb #'h, (r0)		;fills the label scndPly if h or calB
+			beq scndPly
+			cmpb #'c, (r0)
+			beq scndPly	
+			bne midIllg
+scndRet:	add #2, r0
+			cmpb #40, (r0)
+			bne midIllg
+			add #2, r0
+			cmpb #40, (r0)		;recives as many spaces as wanted in a row
+			beq .-12
+			mov r1, -(sp)
+			mov #secndNum, r1	;the space for the ascii number of the second players time
+			br numChk2			;checks legality of the second number
+numRet2:	mov #'/, (r1)
+			mov (sp)+, r1
+			tst @#timeFP		;if timeFP / timeSP is 0 there is no time to play
+			beq midIllg			;so it is treated as illegal value
+			tst @#timeSP
+			beq midIllg
+			jmp ProcGame
+
+frstPly:	mov (r0), firstP
+			br frstRet
+scndPly:	mov (r0), secondP
+			br scndRet
+			
+numChk:		cmpb (r0), #'9		;legality test of the first number argument
+			bgt midIllg
+			cmpb (r0), #'0
+			blt midIllg			
+			mov (r0), (r1)+
+			mov r2, -(sp)
+			mov r3, -(sp)
+			clr r2
+			mov @#timeFP, r2
+			mul #10., r2 
+			add (r0), r3
+			sub #'0, r3
+			mov r3, @#timeFP
+			mov (sp)+, r3
+			mov (sp)+, r2
+			add #2, r0				
+			cmpb #40, (r0)
+			beq numRet
+			br numChk
+			
+midIllg:	jmp illegal
+
+numChk2:	cmpb (r0), #'9		;legality test of the first number argument
+			bgt midIllg
+			cmpb (r0), #'0
+			blt midIllg
+			mov (r0), (r1)+
+			mov r2, -(sp)
+			mov r3, -(sp)
+			clr r2
+			mov @#timeSP, r2
+			mul #10., r2 
+			add (r0), r3
+			sub #'0, r3
+			mov r3, @#timeSP
+			mov (sp)+, r3
+			mov (sp)+, r2
+			
+			add #2, r0
+			cmpb #cr, (r0)
+			beq numRet2
+			cmpb #40, (r0)
+			beq numRet2
+			br numChk2
+					
+ProcGame:	clr r0					;procGame is used after the line given is found legal start
+			mov r1, -(sp)			;and prints the relevant messages
+			clr r1
+			movb strMsg(r1), r0				;strLo
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, strMsg(r1)
+			bne .-20						;bne strLo:
+			clr r0
+			clr r1
+			movb strMsg1(r1), r0			;strLoop:	
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, strMsg1(r1)
+			bne .-20						;bne strLoop:	
+			clr r0
+			clr r1
+			cmpb firstP, #'c
+			bne .+10						;bne gap20
+			jsr pc, compLoop
+			br .+6							;br gap21
+			jsr pc, humLoop					;gap20
+			clr r0							;gap21
+			clr r1
+			jsr pc, withLoop
+			clr r0
+			clr r1
+			movb firstNum(r1), r0			;num1Loop:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, firstNum(r1)
+			bne .-20						;bne num1Loop:				
+			clr r0
+			clr r1
+			jsr pc, endSLoop
+			clr r0
+			clr r1
+			movb strMsg2(r1), r0			;strLoop2:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, strMsg2(r1)
+			bne .-20						;bne strLoop2:
+			clr r0
+			clr r1
+			cmpb secondP, #'c
+			bne .+10			;bne jump1
+			jsr pc, compLoop
+			br .+6				;br jump2
+			jsr pc, humLoop		;jump1
+			clr r0				;jump2
+			clr r1
+			jsr pc, withLoop
+			clr r0
+			clr r1
+			movb secndNum(r1), r0			;num2Loop:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, secndNum(r1)
+			bne .-20						;bne num2Loop:
+			clr r0
+			clr r1
+			jsr pc, endSLoop
+			mov #1, @#Player
+			mov @#Player, @#CurPlay
+			
+			clr r0
+			mov startBrd(r0), Board(r0)	;loop:	
+			add #2, r0
+			cmp r0, #176 					;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	.-16					;bmi loop:
+			
+			mov (sp)+, r1
+			mov (sp)+, r0
+			jsr pc, Layout
+			mov #1, gameON
+			mov #0, @#count
+			rts pc
+
+humLoop:	movb strMsgH(r1), r0			;humLoop:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, strMsgH(r1)
+			bne .-20						;bne humLoop:
+			rts pc
+			
+compLoop:	movb strMsgC(r1), r0			;compLoop:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, strMsgC(r1)
+			bne .-20						;bne compLoop:
+			rts pc
+
+withLoop:	movb with(r1), r0				;withLoop:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, with(r1)
+			bne .-20						;bne withLoop:
+			rts pc
+			
+endSLoop:	movb strMsgE(r1), r0			;endSLoop:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, strMsgE(r1)
+			bne .-20						;bne endSLoop:
+			rts pc
+			
+			
+echo:	;clr count
+		mov #tkb, -(sp)
+		iot
+		tst (sp)+
+		mov #101, @#tks
+		rti
+
+print:	tstb @#tps
+		bpl print
+		cmp #bs, @4(sp)
+		beq bkSpace
+		cmp #cr, @4(sp)
+		beq enter
+		mov r0, -(sp)
+		mov @#cmdCount, r0
+		add #command,	r0
+		mov @6(sp), (r0)
+		add #2, @#cmdCount
+		mov (sp)+, r0
+		movb @4(sp), @#tpb
+		rti
+
+;backspace is doing one move back, adding a space and doing another move back 
+
+bkSpace:sub #2, @#cmdCount
+		mov r0, -(sp)
+		mov #command, r0
+		movb #40, cmdCount(r0)
+		mov (sp)+, r0
+		movb @4(sp), @#tpb
+		tstb @#tps
+		bpl .-4
+		movb #40, @#tpb
+		tstb @#tps
+		bpl .-4
+		movb @4(sp), @#tpb
+		rti
+		
+;enter is inputing both cr and lf arguments and sending the current line to the cmdLegal function
+		
+enter:	mov r0, -(sp)
+		mov @#cmdCount, r0
+		add #command,	r0
+		mov @6(sp), (r0)
+		add #2, @#cmdCount
+		mov (sp)+, r0
+		movb #lf, @#tpb
+		tstb @#tps
+		bpl .-4
+		movb @4(sp), @#tpb
+		movb #lf, @#tpb
+		tstb @#tps
+		bpl .-4
+		movb @4(sp), @#tpb
+		jsr pc, cmdLegal
+		clr cmdCount
+		movb #'$, @#tpb
+		tstb @#tps
+		bpl .-4
+		movb #40, @#tpb
+		tstb @#tps
+		bpl .-4
+		rti
+		
+clock:	inc @#count
+		rti
+
+putc:	tstb @#tps
+		bpl .-4
+		movb r0, @#tpb
+		rts pc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     timetest    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;timetest function is used for human player the time test is checked in a loop in the main when
+; the current player is human. in the case where he is out of time the relevant message
+;is printed and the game is reset
+
+timetest:	mov r2, -(sp)
+			mov r3, -(sp)
+			clr r3
+			cmp @#Player, #1
+			bne .+10
+			mov @#timeFP, r2
+			br .+6
+			mov @#timeSP, r2
+			mul @#rate, r2
+			sub @#count, r3
+			tst r3
+			ble .+14			;beq GAMEOVER:
+			mov (sp)+, r3
+			mov (sp)+, r2
+			rts pc
+
+			clr r0				;GAMEOVER:
+			clr r1
+			cmp @#Player, #1
+			bne .+24						;bne strLoop:	(Black)
+			movb strMsg1(r1), r0			;strLoop:	(White)
+			jsr pc, putc
+			inc r1
+			cmp r1, #6
+			bne .-16						;bne strLoop:	
+			br .+22							;br humLoop
+			movb strMsg2(r1), r0			;strLoop:	(Black)
+			jsr pc, putc
+			inc r1
+			cmp r1, #6
+			bne .-16						;bne strLoop:
+			clr r0
+			clr r1
+			jsr pc, humLoop
+			clr r0
+			clr r1
+			movb KOmsg(r1), r0			;KO-loop
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, KOmsg(r1)
+			bne .-20					;bne KO-loop
+			mov (sp)+, r3
+			mov (sp)+, r2
+			clr @#Player
+			clr @#CurPlay
+			clr @#Steps
+			clr @#firstP
+			clr @#secondP
+			clr @#timeFP
+			clr @#timeSP
+			clr @#gameON
+			rts pc
+			
+		
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     movHuman    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;this function checks the legality of a move and if the player making it is a human
+;if possible this function will return to where it was called (and then the movPiece will make the move)
+;if the move is not legal according to it it will send the pc to the illegal function for declaring
+;an unexecutable move
+
+movHuman:	mov r5, -(sp)
+			mov r4, -(sp)
+			cmp @#Player, #1
+			bne MoveBlk
+
+MoveWht:	mov #Board, -(sp)
+			mov @#SrcPos, -(sp)	; Putting SrcPos in stack
+			asl (sp)			; SrcPos*=2
+			add 2(sp), (sp)		; SrcPos+=Board
+			mov @#DstPos, -(sp)	; Putting DstPos in stack 
+			asl (sp)			; DstPos*=2
+			add 4(sp), (sp)		; DstPos*=2
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			cmp @4(sp),	#1		;compare SrcPos to White
+			bne midEchk
+			cmp @2(sp), #0
+			bne midEchk
+			cmp 4(sp), #Board+20 		;checks if first row a.k.a no moves
+			bmi midEchk
+		;	cmp @#frstPly, #'h
+		;	bne midEchk
+			
+			mov 4(sp), r5
+			sub #16, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq ul
+			cmp (sp), #-16
+			beq goSmov
+			cmp (sp), #-34
+			beq ur2
+			mov 4(sp), r5
+			clr r4
+			div #20, r4	
+			tst r5
+			beq midEchk
+ul:			cmp (sp), #-22
+			beq goSmov
+			cmp (sp), #-44
+			beq ul2
+			
+ur2:		mov 4(sp), r5
+			sub #14, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq midEchk
+			cmp @#SrcPos, #42
+			bmi midEchk 
+			mov 4(sp), (sp)
+			sub #16, (sp)
+			cmp @(sp), #2			
+			bne midEchk
+goSmov:		jmp sxsMov
+			
+midEchk:	jmp endChk
+			
+ul2:		mov 4(sp), r5
+			sub #2, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq midEchk
+			cmp @#SrcPos, #46
+			bmi midEchk 
+			mov 4(sp), (sp)
+			sub #22, (sp)
+			cmp @(sp), #2			
+			bne midEchk
+			jmp sxsMov
+			
+MoveBlk:	mov #Board, -(sp)
+			mov @#SrcPos, -(sp)	; Putting SrcPos in stack
+			asl (sp)			; SrcPos*=2
+			add 2(sp), (sp)		; SrcPos+=Board
+			mov @#DstPos, -(sp)	; Putting DstPos in stack 
+			asl (sp)			; DstPos*=2
+			add 4(sp), (sp)		; DstPos*=2
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			cmp @4(sp),	#2		;compare SrcPos to White
+			bne midEchk
+			cmp @2(sp), #0
+			bne midEchk
+			cmp 4(sp), #Board+160		
+			bpl midEchk
+		;	cmp @#scndPly, #'h
+		;	bne midEchk
+			
+			mov 4(sp), r5
+			sub #16, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq dl
+			cmp (sp), #22
+			beq sxsMov
+			cmp (sp), #44
+			beq dr2
+			mov 4(sp), r5
+			clr r4
+			div #20, r4	
+			tst r5
+			beq endChk
+dl:			cmp (sp), #16
+			beq sxsMov
+			cmp (sp), #34
+			beq dl2
+			
+dr2:		mov 4(sp), r5
+			sub #14, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq endChk
+			cmp @#SrcPos, #132
+			bpl endChk 
+			mov 4(sp), (sp)
+			sub #16, (sp)
+			cmp @(sp), #2			
+			bne endChk
+			jmp sxsMov
+			
+dl2:		mov 4(sp), r5
+			sub #2, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq endChk
+			cmp @#SrcPos, #136
+			bpl endChk 
+			mov 4(sp), (sp)
+			sub #22, (sp)
+			cmp @(sp), #2			
+			bne endChk
+			jmp sxsMov
+			
+sxsMov:		cmp (sp)+, (sp)+
+			cmp (sp)+, (sp)+
+			mov (sp)+, r4
+			mov (sp)+, r5
+			rts pc
+			
+endChk:		cmp (sp)+, (sp)+
+			cmp (sp)+, (sp)+
+			mov (sp)+, r4
+			mov (sp)+, r5
+			tst (sp)+
+			jmp ilegPrep
+			
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@      Layout      @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;this function will print the board and the relevant messages 
+;in the end of this function the count label is cleared and the count of a player starts after this
+;function ends
+
+;Board message
+Layout:		mov r0, -(sp)
+			mov r1, -(sp)
+			mov r2, -(sp)
+			mov r4, -(sp)
+			mov r5, -(sp)
+			
+			clr r0
+			clr r1
+brdMLop:	movb BoardMsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, BoardMsg(r1)
+			bne brdMLop
+			
+;The actual board			
+			mov #0, r2
+brdLop:		mov Board(r2), r1
+			tst r1
+			bne .+10			;bne nextW:
+			mov #'_, r0
+			br endSpot
+			cmp #1, r1			;nextW:
+			bne .+10			;bne nextB:
+			mov #'W, r0
+			br endSpot
+			mov #'B, r0			;nextB:
+			
+endSpot:	jsr pc, putc
+			
+			mov r2, r5
+			sub #16, r5 					
+			clr r4							
+			div #20, r4						
+			tst r5							
+			beq nBrdLine
+retNline:	add #2, r2
+			cmp r2, #178 					
+			bmi	brdLop
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			jmp curpLop
+			
+
+nBrdLine:	mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			br retNline
+
+curpLop:	movb CurPmsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, CurPmsg(r1)
+			bne curpLop	
+			clr r0
+			clr r1
+			cmp @#CurPlay, #1
+			beq whiteLop
+blackLop:	movb blackMsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, blackMsg(r1)
+			bne blackLop
+			clr r0
+			clr r1
+			cmpb secondP, #'c
+			bne humEnd
+			br comEnd
+			
+			
+whiteLop:	movb whiteMsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, whiteMsg(r1)
+			bne whiteLop
+			clr r0
+			clr r1
+			cmpb firstP, #'c 
+			bne humEnd
+			br comEnd
+			
+			
+humEnd:		jsr pc, humLoop
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			
+			clr r0
+			clr command(r0)
+			add #2, r0
+			cmp r0, #64
+			blt .-14
+			
+			mov (sp)+, r5
+			mov (sp)+, r4
+			mov (sp)+, r2
+			mov (sp)+, r1
+			mov (sp)+, r0
+			clr @#count
+			
+			rts pc
+			
+comEnd:		jsr pc, compLoop
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			
+			clr r0
+			clr command(r0)
+			add #2, r0
+			cmp r0, #64
+			blt .-14
+			
+			mov (sp)+, r5
+			mov (sp)+, r4
+			mov (sp)+, r2
+			mov (sp)+, r1
+			mov (sp)+, r0
+			clr @#count
+			rts pc
+
+BoardMsg:	.ascii <Board layout:\r\n\r\n/>
+CurPmsg:	.ascii <Current Player: />
+whiteMsg:	.ascii <White />
+blackMsg:	.ascii <Black />
+.even
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     compMov     @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;the next 1000 lines of code are ex3 *_*
+			
+compMov:	mov #SrcPos, -(sp)
+			mov #DstPos, -(sp)
+			mov #WinParam, -(sp)
+			jsr pc, getMaxWp
+			mov @#Player, @#CurPlay
+			cmp (sp)+, (sp)+
+			tst(sp)+
+			rts pc
+
+;the initial preperation. this would be the "main" if the soul purpose was the recurtion
+
+getMaxWp:
+			mov @#Player, @#CurPlay
+			mov @#Steps, @#CurStep
+			jsr pc,	Start					;starting getMaxWp
+			mov @#WinParam, @2(sp)
+			mov @#BestDst, @4(sp)
+			mov @#BestSrc, @6(sp)
+			rts pc
+CurPlay: .word 0	
+CurStep: .word 0	
+
+;the main wrapper function, it is called in every recurtion and makes sure that all the prior 
+;register info is saved, it also flips the current player before entering a recurtion and 
+;unflips it after the recurtion is done. same is done with substracting the current steps count
+
+getMax:	
+			jsr pc, SwapPly					;Preperations For the Recurtion, 
+			dec @#CurStep
+Start:		mov r0, -(sp)					
+			mov r1, -(sp)					
+			mov r2, -(sp)
+			mov r3, -(sp)
+			mov r4, -(sp)					
+			mov r5, -(sp)
+			jsr pc, getAux	
+			mov (sp)+, r5					
+			mov (sp)+, r4
+			mov (sp)+, r3
+			mov (sp)+, r2					
+			mov (sp)+, r1
+			mov (sp)+, r0	
+			jsr pc, SwapPly					;undo the Recurtion prep, 
+			inc @#CurStep
+			;jsr pc, compTime			;time test for pc
+			rts pc
+
+;the auxsilery recurtion, in every call the function checks if there are still moves left. 
+;if there are, it checks before starting the recurtion if the position is a win or lose state,
+;if this is an end point we calculate the win param according to the minormax
+;if this isnt an end point this function will call MovRec.
+
+getAux:
+			tst @#CurStep						; if(CurStep == 0) {
+			bne gap1
+			;jsr pc, SwapPly
+fold:		mov r4, -(sp)					;save r4 because CalcWP needs it
+			mov #Board, -(sp)				;Preperations For the CalcWP
+			mov @#CurPlay,-(sp)				;
+			jsr pc, calcWP
+			cmp (sp)+, (sp)+
+			mov r4, -(sp)
+			mov @#CurPlay, -(sp)					;put Current Player number in the stack
+			mov #Player, -(sp)					;put Player address in the stack
+			jsr pc, minOrMax
+			cmp (sp)+, (sp)+
+			mov r5, -(sp)
+			mov r4, -(sp)
+			mul 4(sp), r4 						;(minOrMax value) * (WinParam)
+			jsr pc, calcMOM						;  } endif(CurStep == 0)
+			tst (sp)+
+			mov (sp)+, r5
+			tst (sp)+
+			mov (sp)+, r4
+			jmp AuxEnd
+
+			
+			
+prep:		mov (sp)+, r2
+			jmp fold			
+			
+gap1:		mov r2, -(sp)
+			mov #Board, -(sp)
+			mov @#CurPlay, -(sp)	
+			tst -(sp)						;place for result for checkWin
+			jsr pc, checkWin
+			mov (sp)+, r2
+			cmp (sp)+, (sp)+					;test checkWin result
+			cmp r2, #1
+			beq prep
+			mov (sp)+, r2
+			jsr pc, MovRec
+			jmp AuxEnd			
+AuxEnd:		rts pc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@  ex2, NumMoves  @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+NumMoves:.word 0	
+;nummoves is the original ex2 code, saving all the registers data and using: r0 as board index
+;r1 as board address pointer, r2 as internal function register, r4,r5 as calculating space (div)		
+			
+NumOfMov:	
+			mov r0, -(sp)					
+			mov r1, -(sp)					
+			mov r2, -(sp)
+			mov r4, -(sp)					
+			mov r5, -(sp)
+			mov #2, r0
+loop:		mov Board(r0), r1
+			tst r1
+			beq endl
+			cmp @#CurPlay, r1
+			bne endl
+			cmp @#CurPlay, #2
+			beq .+10				;beq Black
+			jsr r2, chkMove1
+			br  endl
+			jsr r2, chkMove2		;Black:
+			
+endl:		add #2, r0
+			cmp r0, #176 					;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	loop
+			mov (sp)+, r5					
+			mov (sp)+, r4					
+			mov (sp)+, r2					
+			mov (sp)+, r1					
+			mov (sp)+, r0
+			rts pc
+
+chkMove1:	cmp r1, #1 						;assert equivilant, was checked before the function
+			bne endM1
+			cmp r0, #20 					;checks if first row a.k.a no moves
+			bmi endM1
+			mov r0, r5
+			sub #16, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq upLeft
+			
+upRigt:										;the up right move from r0
+			cmp Board-16(r0), #1 			;substracting 16 in a 10*10 size board 
+			beq upLeft						;is the location of one up one right move
+			cmp 4762(r0), #0	
+			beq resUR
+			clr r4
+			cmp r0, #42 					;is it possible to eat, substracting 42 in octal makes sure we are in 3rd row
+			bmi upLeft
+			mov r0, r5
+			sub #14, r5 					;to round index for devision checks the 2nd most right col 
+			div #20, r4 					;check if the curr spot is one tile from edge 
+			tst r5			
+			beq upLeft
+			cmp Board-34(r0), #0 			;5000-34= 2 up 2 right	
+			bne upLeft
+resUR:		add #1, @#NumMoves
+			
+upLeft:		mov r0, r5
+			clr r4							;checks if left border col
+			div #20, r4		
+			tst r5
+			beq endM1		
+			cmp Board-22(r0), #1 			;the up left move from r0
+			beq endM1
+			cmp Board-22(r0), #0 
+			beq resUL
+			clr r4
+			cmp r0, #46 					;is it possible to eat
+			bmi endM1
+			mov r0, r5
+			sub #2, r5 						;check if curr is 2nd left col
+			div #20, r4
+			tst r5
+			beq endM1
+			cmp Board-44(r0), #0 			;is the jump across the player empty
+			bne endM1
+resUL:		add #1, @#NumMoves					
+endM1:		rts r2
+
+chkMove2:	cmp r1, #2
+			bne endM2
+			cmp r0, #160 					;checks if curr spot is last row a.k.a no moves 
+			bpl endM2	 					;because the amount of cells are 176 and first in the last row is index 160
+			mov r0, r5
+			sub #16, r5 					;checks if right col a.k.a no moves right
+			clr r4			
+			div #20, r4 
+			cmp r5, #0
+			beq dnLeft
+			
+dnRigt:		cmp Board+22(r0), #2 			;the down right move from r0 is excatly 8 cells
+			beq dnLeft						;which means its the one exactly below, adding 2 in one
+			cmp Board+22(r0), #0			;more move to the right
+			beq resDR
+			clr r4
+			cmp r0, #132 					;is it possible to eat
+			bpl dnLeft
+			mov r0, r5
+			sub #14, r5
+			div #20, r4 					;check if the curr spot is in the 2nd right col 
+			tst r5		
+			beq dnLeft
+			cmp Board+44(r0), #0 			;is the jump down right over a white piece is empty
+			bne dnLeft		
+resDR:		add #1, @#NumMoves
+			
+dnLeft:		mov r0, r5
+			clr r4							;checks if left col a.k.a no moves left
+			div #20, r4 
+			tst r5
+			beq endM1		 
+			cmp Board+16(r0), #2 			;the down left move from r0 
+			beq endM2	
+			cmp Board+16(r0), #0
+			beq resDL
+			clr r4
+			cmp r0, #136 					;checks if in 2nd row from bottom 
+			bpl endM2
+			mov r0, r5
+			sub #2, r5						;checks if the curr spot is in 2nd left col
+			div #20, r4 
+			tst r5
+			beq endM2
+			cmp Board+34(r0), #0 			;is the jump down left over a white piece is empty
+			bne endM2		
+resDL:		add #1, @#NumMoves				
+endM2:		rts r2 			
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@  MovRec (Recurtion Call)  @@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;the moving piece of the recurtion, based on the Num Of Moves code. if found a legal move
+;the move is made and there is a call to the recurtion. after the rec is returned, the win param of that move
+;is checked and if the value of that move is better then what was made before, it updates the win param and the best 
+;src and dst accordingly.in any case the move made is undone and the next legal move is found and so on..
+;in the end of a cycle of move rec, the board is set as before and the best src and dst and win param are found
+;and inputed
+
+MovRec:		mov r0, -(sp)					
+			mov r1, -(sp)					
+			mov r2, -(sp)
+			mov r3, -(sp)
+			mov r4, -(sp)					
+			mov r5, -(sp)
+			mov r4, -(sp)
+			mov @#CurPlay, -(sp)	;put Current Player number in the stack
+			mov #Player, -(sp)	;put Player address in the stack
+			jsr pc, minOrMax
+			tst r4
+			bmi jump1
+			mov #-21, @#WinParam
+			br ret1
+jump1:		mov #21, @#WinParam	
+ret1:		cmp(sp)+, (sp)+
+			mov (sp)+, r4
+			mov r4, -(sp)
+			mov @#CurPlay, -(sp)	;put Current Player number in the stack
+			mov #Player, -(sp)	;put Player address in the stack
+			jsr pc, minOrMax
+			mov r4, r3
+			cmp (sp)+, (sp)+
+			mov (sp)+, r4
+			mov #2, r0
+loopR:		
+			mov Board(r0), r1
+			tst r1
+			beq endlR
+			cmp @#CurPlay, r1
+			bne endlR
+			cmp @#CurPlay, #2
+			beq Blck
+			jsr r2, chkMvW
+			br  endlR
+Blck:		jsr r2, chkMvB
+			
+endlR:		add #2, r0
+			cmp r0, #176 
+			bmi	loopR
+			cmp @#WinParam, #21
+			beq	forceWP
+			cmp@#WinParam, #-21
+			beq forceWP
+aft1:		mov (sp)+, r5					
+			mov (sp)+, r4
+			mov (sp)+, r3
+			mov (sp)+, r2					
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+			
+forceWP:	mov r4, -(sp)
+			mov r5, -(sp)								;save r4 because CalcWP needs it
+			mov #Board, -(sp)				;Preperations For the CalcWP
+			mov @#CurPlay,-(sp)				;
+			jsr pc, calcWP
+			mul r3, r4
+			mov r5, @#WinParam
+			cmp (sp)+, (sp)+
+			mov (sp)+, r5
+			mov (sp)+, r4
+			tst @#CurStep
+			bne forceAux
+			jmp aft1
+
+forceAux:	jsr pc, compTime			;time test for pc
+			jsr pc, getMax
+			jmp aft1
+			
+updateSD:	cmp @#CurStep, @#Steps
+			bne udRet
+			mov @#SrcPos, @#BestSrc
+			mov @#DstPos, @#BestDst
+udRet:		rts pc
+			
+BestSrc:	.word 0
+BestDst:	.word 0
+
+chkMvW:		cmp r1, #1 
+			bne endMvW1
+			cmp r0, #20 
+			bmi endMvW1
+			mov r0, r5
+			sub #16, r5 
+			clr r4		
+			div #20, r4	
+			tst r5		
+			beq con2
+			
+upRgt:		
+			cmp Board-16(r0), #1 
+			beq con2			
+			cmp Board-16(r0), #0	
+			beq movUR
+			clr r4
+			cmp r0, #42
+			bmi con2
+			mov r0, r5
+			sub #14, r5 
+			div #20, r4 
+			tst r5		
+			beq upLft
+			cmp Board-34(r0), #0 
+			beq jumpUR
+			br upLft
+con2:		jmp upLft			
+movUR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #16, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3						;minormax
+			bmi min1
+			cmp @#WinParam, (sp)
+			bge gap19
+			br gapWp1
+min1:		cmp @#WinParam, (sp)
+			ble gap19
+gapWp1:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br upLft
+gap19:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br upLft
+endMvW1:	br endMvW
+			
+jumpUR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #34, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3
+			bmi min2
+			cmp @#WinParam, (sp)
+			bge gap18
+			br gapWp2
+min2:		cmp @#WinParam, (sp)
+			ble gap18
+gapWp2:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br upLft
+gap18:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			
+upLft:		mov r0, r5
+			clr r4			
+			div #20, r4		
+			tst r5
+			beq endMvW		
+			cmp Board-22(r0), #1 
+			beq endMvW
+			cmp Board-22(r0), #0 
+			beq movUL
+			clr r4
+			cmp r0, #46 				
+			bmi endMvW
+			mov r0, r5
+			sub #2, r5 	
+			div #20, r4
+			tst r5
+			beq endMvW
+			cmp Board-44(r0), #0 
+			beq jumpUL					
+endMvW:		rts r2
+
+movUL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #22, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3
+			bmi min3
+			cmp @#WinParam, (sp)
+			bge gap17
+			br gapWp3
+min3:		cmp @#WinParam, (sp)
+			ble gap17
+gapWp3:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+gap17:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+			
+jumpUL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #44, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3
+			bmi min4
+			cmp @#WinParam, (sp)
+			bge gap16
+			br gapWp4
+min4:		cmp @#WinParam, (sp)
+			ble gap16
+gapWp4:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+gap16:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+
+chkMvB:		cmp r1, #2
+			bne endMvB1
+			cmp r0, #160 
+			bpl endMvB1	 
+			mov r0, r5
+			sub #16, r5 
+			clr r4		
+			div #20, r4 
+			cmp r5, #0
+			beq con1
+
+dnRgt:		cmp Board+22(r0), #2 
+			beq con1		
+			cmp Board+22(r0), #0
+			beq movDR
+			clr r4
+			cmp r0, #132 
+			bpl con1
+			mov r0, r5
+			sub #14, r5
+			div #20, r4 
+			tst r5	
+			beq dnLft
+			cmp Board+44(r0), #0
+			beq jumpDR
+			br dnLft	
+con1:		jmp dnLft	
+movDR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #22, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3
+			bmi min5
+			cmp @#WinParam, (sp)
+			bge gap15
+			br gapWp5
+min5:		cmp @#WinParam, (sp)
+			ble gap15
+gapWp5:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br dnLft
+gap15:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br dnLft
+endMvB1:	br endMvB
+			
+jumpDR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #44, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3
+			bmi min6
+			cmp @#WinParam, (sp)
+			bge gap14
+			br gapWp6
+min6:		cmp @#WinParam, (sp)
+			ble gap14
+gapWp6:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br dnLft
+gap14:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			
+dnLft:		mov r0, r5
+			clr r4	
+			div #20, r4 
+			tst r5
+			beq endMvB		 
+			cmp Board+16(r0), #2 
+			beq endMvB	
+			cmp Board+16(r0), #0
+			beq movDL
+			clr r4
+			cmp r0, #136 
+			bpl endMvB
+			mov r0, r5
+			sub #2, r5	
+			div #20, r4 
+			tst r5
+			beq endMvB
+			cmp Board+34(r0), #0 
+			beq jumpDL			
+endMvB:		rts r2 
+
+movDL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #16, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3
+			bmi min7
+			cmp @#WinParam, (sp)
+			bge gap13
+			br gapWp7
+min7:		cmp @#WinParam, (sp)
+			ble gap13
+gapWp7:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+gap13:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+			
+jumpDL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #34, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			jsr pc, compTime			;time test for pc
+			tst r3
+			bmi min8
+			cmp @#WinParam, (sp)
+			bge gap12
+			br gapWp8
+min8:		cmp @#WinParam, (sp)
+			ble gap12
+gapWp8:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+gap12:		jsr pc, updateSD
+			cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     MovPiece    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;moves the player from a given source to a given dst. if the move is a jump (the legality of it is checked already)
+;the player who was eaten is cleared from the board
+
+movPiece:	
+			mov @(r5)+, -(sp)	; Putting SrcPos in stack
+			asl (sp)			; SrcPos*=2
+			add 4(sp), (sp)		; SrcPos+=Board
+			mov @(r5)+, -(sp)	; Putting DstPos in stack 
+			asl (sp)			; DstPos*=2
+			add 6(sp), (sp)		; DstPos*=2
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			tst (sp)
+			bpl pushBlk
+			bmi pushWht
+zuruk:		cmp @4(sp),	#1		;compare SrcPos to White
+			beq makeMvW
+			br	makeMvB		
+endR5:		cmp (sp)+, (sp)+
+			tst (sp)+
+			rts r5	
+			
+pushBlk:	mov #2, @#CurPlay
+			jmp zuruk
+pushWht:	mov #1, @#CurPlay
+			jmp zuruk
+			
+makeMvW:
+			cmp (sp), #-44
+			beq makeCh1
+			cmp (sp), #-34
+			beq makeCh2
+			cmp (sp), #-16
+			beq makeCh5
+			cmp (sp), #-22
+			beq makeCh5
+			jmp endR5
+
+makeMvB:
+			cmp (sp), #44
+			beq makeCh3
+			cmp (sp), #34
+			beq makeCh4
+			cmp (sp), #16
+			beq makeCh5
+			cmp (sp), #22
+			beq makeCh5
+			jmp endR5			
+
+
+makeCh1:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #22, (sp)		; *temp=*Board+SrcPos-22
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #1, @(sp)		; temp=1 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5		
+
+			
+makeCh2:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #16, (sp)		; *temp=*Board+SrcPos-16
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #1, @(sp)		; temp=1 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5			
+	
+makeCh3:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #22, (sp)		; *temp=*Board+SrcPos+22
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #2, @(sp)		; temp=2 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5			
+	
+makeCh4:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #16, (sp)		; *temp=*Board+SrcPos+16
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #2, @(sp)		; temp=2 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5
+makeCh5:	
+			mov 0, -(sp)		; *temp=0
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov @#CurPlay, @(sp); temp=CurPlay (Puts the Number of the 
+								; player in CurPlay in the index that temp was pointing)
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			tst (sp)+
+			jmp endR5
+
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     UndoMov     @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;recives a source and dst and puts the player back in the source and clears the dst.
+;if the player did a jump, the adversery player is restored in the middle spot of the jump			
+
+undoMov:	
+			mov @(r5)+, -(sp)
+			asl (sp)
+			add 6(sp), (sp)
+			mov @(r5)+, -(sp)
+			asl (sp)
+			add 10(sp), (sp)
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			cmp @2(sp),	#1		;compare DstPos to White
+			beq mkMvW2
+			br	mkMvB2
+endR55:		cmp(sp)+, (sp)+
+			tst (sp)+
+			rts r5	
+			
+mkMvW2:
+			cmp (sp),	#-44	;checking if DstPos memory address minus the SrcPos 
+			beq makeCh11		;memory Address is equal to -44
+			cmp (sp),	#-34	;checking if DstPos memory address minus the SrcPos
+			beq makeCh22		;memory Address is equal to -34
+			cmp (sp),	#-22	;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to -44
+			cmp (sp),	#-16	;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to -44
+			jmp endR55
+
+mkMvB2:
+			cmp (sp),	#44		;checking if DstPos memory address minus the SrcPos
+			beq makeCh33		;memory Address is equal to 44
+			cmp (sp),	#34		;checking if DstPos memory address minus the SrcPos
+			beq makeCh44		;memory Address is equal to 34
+			cmp (sp),	#22		;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to 22
+			cmp (sp),	#16		;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to 16
+			jmp endR55			
+
+
+makeCh11:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #22, (sp)		; *temp=*Board+SrcPos-22
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+
+			
+makeCh22:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #16, (sp)		; *temp=*Board+SrcPos-16
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+	
+makeCh33:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #22, (sp)		; *temp=*Board+SrcPos+22
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+	
+makeCh44:	mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #16, (sp)		; *temp=*Board+SrcPos+16
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+makeCh55:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov @#CurPlay, @(sp); temp=CurPlay (Puts the Number of the 
+								; player in CurPlay in the index that temp was pointing)
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			tst (sp)+
+			jmp endR55		
+
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     CheckWin    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+
+;checks if CalcWP returns 20, if it does, checkWin returns 1, else checkWin returns -1		
+
+checkWin:
+			mov r4, -(sp)					;save r4 because CalcWP needs it
+			mov 10(sp), -(sp)				; #Board Preperations For the CalcWP
+			mov 10(sp),-(sp)				; @#CurPlay
+			jsr pc, calcWP					
+			cmp (sp)+, (sp)+				;pop Board and CurPlay used in CalcWP
+			cmp r4, #20
+			beq plWin
+			mov #-1, 4(sp) 	;plNotWin:
+			mov (sp)+, r4
+			rts pc
+plWin:		mov #1,	4(sp)
+			mov (sp)+, r4
+			rts pc							
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     CalcWP      @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;using r0 as index to run on the board, r1 as board+index holder 
+; and running on board to find: 
+;if there are no players of the "other" player return win
+;if i have no players return lose
+;else if there are no moves, find which player has more moves and set winner accordingly
+;if there are still moves, there is no relevant win parameter
+
+countBd:	mov #2, r0			; running on the Board
+loopCa:		clr r1
+			add r0,r1
+			add 16(sp),	r1		;board address
+			tst r1
+			beq endlCa
+			cmp (r1), #0
+			bne checkPl			;check if the place contains 0
+endlCa:		add #2, r0
+			cmp r0, #176 		;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	loopCa
+			rts pc
+checkPl:						; increasing the correct player soldiers count
+			cmp (r1),	#1
+			beq .+10			;beq incWh
+			inc 4(sp)
+			br endlCa
+			inc 2(sp)			;incWh
+			br endlCa			
+			
+calcWP:		
+			mov r0,	-(sp)		; saving r0
+			mov r1,	-(sp)		; saving r1
+			clr	r0
+			mov 0, -(sp)		;place for black count
+			mov 0, -(sp)		;place for white count
+			jsr	pc,	countBd		; entering countBoard
+			cmp 12(sp),	#1		;checking which player it is and calculating NUM white - NUM black
+			beq calW
+			br .+12				;br calB
+endCalc:	cmp (sp)+, (sp)+
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+		
+			cmp #0, (sp)		;calB:
+			beq WinWP
+			cmp #0, 2(sp)
+			beq LoseWP
+			jsr pc, chkMv
+			sub	(sp),	2(sp)
+			tst NumMoves
+			bne .+14			;bne midWPb
+			tst 2(sp)	
+			beq .+6				;beq midWPb
+			bpl	WinWP
+			bmi LoseWP
+			mov 2(sp),	r4		;midWPb
+			br endCalc
+		
+calW:		cmp #0, 2(sp)
+			beq WinWP
+			cmp #0, (sp)
+			beq LoseWP
+			jsr pc, chkMv
+			sub 2(sp),	(sp)
+			tst NumMoves
+			bne .+12			;bne midWPw
+			tst (sp)
+			beq .+6				;beq midWPw
+			bpl	WinWP
+			bmi LoseWP
+			mov (sp),	r4		;midWPw
+			br endCalc
+			
+			
+WinWP:		mov #20, r4
+			br endCalc
+LoseWP:		mov #-20, r4
+			br endCalc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     chkMv       @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;checking the total moves possible in the board according to the 
+;ex2 Number Of Moves calculator
+			
+chkMv:		clr @#NumMoves					; Clearing Num Moves label to see if there 					
+			jsr pc, NumOfMov
+			jsr pc, SwapPly
+			jsr pc, NumOfMov
+			jsr pc, SwapPly
+			rts pc
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     MinOrMax    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;looking at the current player compared to the original player recived in stack to 
+;calculate -1 for the adversary player or 1 for the original player
+
+minOrMax:	cmp 4(sp), @2(sp)	; checking if the Player wanted is the current one and 					
+			beq	.+10			; putting the correct value into r4 --- beq isPl:
+			mov #-1, r4
+			rts pc
+			mov #1,	r4			;isPl
+			rts pc
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     SwapPly     @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;swaping the value of current player from 1 to 2 or the other way around
+
+SwapPly: 	cmp @#CurPlay, #1
+			beq .+12
+			mov #1, @#CurPlay
+			rts pc
+			mov #2, @#CurPlay
+			rts pc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@     calcMinOrMax (calcMOM)      @@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@			
+
+;reciving in r5 the (Win Param) * (minOrMax)
+;and using the min or max in stack to calculate if we need the
+;maximal or minimal win param
+
+calcMOM:	jsr pc, OddEven
+			tst Flag
+			beq evn
+			tst 2(sp)
+			bpl .+12				;bpl min
+			cmp r5, @#WinParam
+			bgt .+14				;bgt put
+			rts pc
+			cmp r5, @#WinParam		;min
+			blt .+4
+			rts pc
+			
+			mov r5, @#WinParam		;put
+			rts pc			
+			
+evn:		tst 2(sp)
+			bmi .-22				;bmi min
+			cmp r5, @#WinParam
+			bgt .-20				;bgt put
+			rts pc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@            EvenOdd 	          @@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@			
+			
+;using r4 and r5 to calculate if the current step is even or odd
+			
+OddEven:	mov r4, -(sp)
+			mov r5, -(sp)
+			clr r4
+			mov @#CurStep,	r5
+			div #2,	r4
+			cmp r5, #0
+			bne .+16			;bne odd2
+			mov (sp)+,	r5
+			mov (sp)+,	r4
+			mov #1,	@#Flag
+			rts pc
+			mov (sp)+,	r5		;odd2
+			mov (sp)+,	r4
+			mov #0,	@#Flag
+			rts pc
+
+Flag: .word 0		
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@       END       @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+startBrd:		.word	0, 2, 0, 2, 0, 2, 0, 2
+				.word	2, 0, 2, 0, 2, 0, 2, 0
+				.word	0, 2, 0, 2, 0, 2, 0, 2
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	1, 0, 1, 0, 1, 0, 1, 0
+				.word	0, 1, 0, 1, 0, 1, 0, 1
+				.word	1, 0, 1, 0, 1, 0, 1, 0
+
+
+Board:			.word	0, 1, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 1, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 1, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 2, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+
+Player:	.word	0
+Steps:  .word   1
+SrcPos: .word 0
+DstPos: .word 0
+WinParam: .word 0	
+count: 		.word 0
+			.even
+command:	.blkw 62
+cmdCount:	.word 0
+
+introMSG: 		.ascii <Welcome to 301729547 and 301731998's game \r\n\r\n/> 
+
+timeMsg1:	.ascii <Time left: / > 
+timeMsg2:	.ascii < seconds/ >
+.even
+rate:		.word 1000
+.even
+
+stopMsg1:	.ascii <WP for white player is / > 
+stopMsg2:	.ascii <WP for black player is / >
+stopMsg3:	.ascii <White player wins!/ >
+stopMsg4:	.ascii <Black player wins!/ >
+stopMsg5:	.ascii <Its a tie!/ >
+illgMsg:	.ascii <Cannot execute "/> 
+illgMsgE:	.ascii <"\r\n/> 
+KOmsg:		.ascii < is out of time. Game Over.\r\n\r\n/>
+moveMsg1:	.ascii < move took/>
+
+strMsg:		.ascii <Starting a new game\r\n\r\n/> 
+strMsg1:	.ascii <White player is /> 
+strMsg2:	.ascii <Black player is /> 
+with:		.ascii < with />
+strMsgE:	.ascii < seconds per move\r\n\r\n/>
+.even
+firstNum:	.word	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+			.word	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+			.word 	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+			.word	-1, -1, -1, -1, -1, -1, -1, -1
+secndNum:	.word	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+			.word	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+			.word 	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+			.word	-1, -1, -1, -1, -1, -1, -1, -1
+			.even
+outOfMov: .ascii <The Player has no moves, turn passes\r\n\r\n/>
+	.even		
+gameON:		.word 0
+firstP:		.word 0
+secondP:	.word 0
+strMsgH:	.ascii <Human/>
+strMsgC:	.ascii <Computer/>
+arr_end: 	.ascii </>
+
+

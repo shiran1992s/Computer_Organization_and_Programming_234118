@@ -1,0 +1,7 @@
+
+
+.= torg + 1000
+main:	wait
+		br main
+
+

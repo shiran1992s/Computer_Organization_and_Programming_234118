@@ -1,0 +1,136 @@
+			
+Movsec:		cmp @#Player,	#1
+			bne .+16				;bne checkSP		
+			cmp @#firstP,	#'c
+			bne .+36				;bne ret2
+			jsr pc, compLoop
+			br .+30					;br ret2
+			cmp @#secondP,	#'c		;checkSP
+			bne .+20				;bne ret2
+			jsr pc, compLoop
+			br .+6					;br ret2
+			jsr pc, humLoop			;ret2
+			clr r1
+			clr r0
+			movb moveMsg1(r1), r0			;LopM
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, moveMsg1(r1)
+			bne .-20						;bne LopM
+			
+			mov r2, -(sp)			
+			mov r3, -(sp)
+			clr r2	
+			mov #40, r0
+			jsr pc, putc
+			mov @#count, r1
+			clr r0
+			div @#rate, r0
+			add #'0, r0
+			mov r0, r3
+			cmpb r3, #'9	;numChk1
+			bgt .+14		;bgt there
+			cmpb r3, #'0
+			blt .+6			;blt there
+			jmp .+16		;jmp legitNum
+			inc r2			;there
+			sub #12, r3
+			jmp .-26		;jmp numChk1
+			tst r2				;legitNum
+			beq .+4				;beq gap11
+			mov r2, r0
+			add #'0, r0			;gap11
+			jsr pc, putc
+			mov r3, r0
+			jsr pc, putc
+			mov #'., r0
+			jsr pc, putc
+			mov r1, r0
+			clr r1
+			mul #10, r0
+			div @#rate, r0
+			add #'0, r0
+			jsr pc, putc
+			mov (sp)+, r3
+			mov (sp)+, r2
+			
+			movb timeMsg2(r1), r0			;LopM2
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, timeMsg2(r1)
+			bne .-20						;bne LopM2
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			rts pc
+
+
+
+;---------------original
+			cmp @#Player,	#1
+			bne .+16				;bne checkSP		
+			cmp @#firstP,	#'c
+			bne .+36				;bne ret2
+			jsr pc, compLoop
+			br .+30					;br ret2
+			cmp @#secondP,	#'c		;checkSP
+			bne .+20				;bne ret2
+			jsr pc, compLoop
+			br .+6					;br ret2
+			jsr pc, humLoop			;ret2
+			clr r1
+			clr r0
+			movb moveMsg1(r1), r0			;LopM
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, moveMsg1(r1)
+			bne .-20						;bne LopM
+			jsr pc, Movsec
+			movb timeMsg2(r1), r0			;LopM2
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, timeMsg2(r1)
+			bne .-20						;bne LopM2
+			
+			
+Movsec:		mov r2, -(sp)			
+			mov r3, -(sp)
+			clr r2	
+			mov #40, r0
+			jsr pc, putc
+			mov @#count, r1
+			clr r0
+			div @#rate, r0
+			add #'0, r0
+			mov r0, r3
+			cmpb r3, #'9	;numChk1
+			bgt .+14		;bgt there
+			cmpb r3, #'0
+			blt .+6			;blt there
+			jmp .+16		;jmp legitNum
+			inc r2			;there
+			sub #12, r3
+			jmp .-26		;jmp numChk1
+			tst r2				;legitNum
+			beq .+4				;beq gap11
+			mov r2, r0
+			add #'0, r0			;gap11
+			jsr pc, putc
+			mov r3, r0
+			jsr pc, putc
+			mov #'., r0
+			jsr pc, putc
+			mov r1, r0
+			clr r1
+			mul #10, r0
+			div @#rate, r0
+			add #'0, r0
+			jsr pc, putc
+			mov (sp)+, r3
+			mov (sp)+, r2
+			rts pc

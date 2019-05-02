@@ -1,0 +1,151 @@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     movHuman    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+
+movHuman:	mov r5, -(sp)
+			mov r4, -(sp)
+			cmp @#CurPlay, #1
+			bne MoveBlk
+
+MoveWht:	mov #Board, -(sp)
+			mov @#SrcPos, -(sp)	; Putting SrcPos in stack
+			asl (sp)			; SrcPos*=2
+			add 2(sp), (sp)		; SrcPos+=Board
+			mov @#DstPos, -(sp)	; Putting DstPos in stack 
+			asl (sp)			; DstPos*=2
+			add 4(sp), (sp)		; DstPos*=2
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			cmp @4(sp),	#1		;compare SrcPos to White
+			bne endChk
+			cmp @2(sp), #0
+			bne endChk
+			cmp 4(sp), #20 		;checks if first row a.k.a no moves
+			bmi endChk
+			
+			mov 4(sp), r5
+			sub #16, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq ul
+			cmp (sp), #-16
+			beq sxsMov
+			cmp (sp), #-34
+			beq ur2
+			mov 4(sp), r5
+			clr r4
+			div #20, r4	
+			tst r5
+			beq endChk
+ul:			cmp (sp), #-22
+			beq sxsMov
+			cmp (sp), #-44
+			beq ul2
+			
+ur2:		mov 4(sp), r5
+			sub #14, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq endChk
+			cmp @#SrcPos, #42
+			bmi endChk 
+			mov 4(sp), (sp)
+			sub #16, (sp)
+			cmp @(sp), #2			
+			bne endChk
+			jmp sxsMov
+			
+ul2:		mov 4(sp), r5
+			sub #2, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq endChk
+			cmp @#SrcPos, #46
+			bmi endChk 
+			mov 4(sp), (sp)
+			sub #22, (sp)
+			cmp @(sp), #2			
+			bne endChk
+			jmp sxsMov
+			
+MoveBlk:	mov #Board, -(sp)
+			mov @#SrcPos, -(sp)	; Putting SrcPos in stack
+			asl (sp)			; SrcPos*=2
+			add 2(sp), (sp)		; SrcPos+=Board
+			mov @#DstPos, -(sp)	; Putting DstPos in stack 
+			asl (sp)			; DstPos*=2
+			add 4(sp), (sp)		; DstPos*=2
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			cmp @4(sp),	#2		;compare SrcPos to White
+			bne endChk
+			cmp @2(sp), #0
+			bne endChk
+			cmp 4(sp), #160		
+			bpl endChk
+			
+			mov 4(sp), r5
+			sub #16, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq dl
+			cmp (sp), #22
+			beq sxsMov
+			cmp (sp), #44
+			beq dr2
+			mov 4(sp), r5
+			clr r4
+			div #20, r4	
+			tst r5
+			beq endChk
+dl:			cmp (sp), #16
+			beq sxsMov
+			cmp (sp), #34
+			beq dl2
+			
+dr2:		mov 4(sp), r5
+			sub #14, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq endChk
+			cmp @#SrcPos, #132
+			bpl endChk 
+			mov 4(sp), (sp)
+			sub #16, (sp)
+			cmp @(sp), #2			
+			bne endChk
+			jmp sxsMov
+			
+dl2:		mov 4(sp), r5
+			sub #2, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq endChk
+			cmp @#SrcPos, #136
+			bpl endChk 
+			mov 4(sp), (sp)
+			sub #22, (sp)
+			cmp @(sp), #2			
+			bne endChk
+			jmp sxsMov
+			
+sxsMov:		cmp (sp)+, (sp)+
+			cmp (sp)+, (sp)+
+			mov (sp)+, r4
+			mov (sp)+, r5
+			rts pc
+			
+endChk:		cmp (sp)+, (sp)+
+			cmp (sp)+, (sp)+
+			mov (sp)+, r4
+			mov (sp)+, r5
+			tst (sp)+
+			jmp illegal

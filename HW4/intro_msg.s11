@@ -1,0 +1,114 @@
+tks = 177560
+tkb = 177562
+tps = 177564
+tpb = 177566
+cls = 177546
+
+cr = 15
+lf = 12
+
+.= torg+20	;	iot
+	.word print
+	.word 300
+
+.= torg+60	;	keyboard
+	.word echo
+	.word 200
+
+.= torg+100
+	.word clock
+	.word 300
+
+.= torg + 1000
+main:		mov pc, sp
+			mov r0, -(sp)
+			mov r1, -(sp)
+			
+			
+			clr r1
+introL:		movb label(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, label(r1)
+			bne introL
+			
+			clr r1
+strt_ec:	movb ec_tst(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, ec_tst(r1)
+			bne strt_ec
+			
+			clr r1
+get_loop:	clr count
+			mov #101, @#tks
+			mov #100, @#cls
+			
+			mov #w8, -(sp)
+			iot
+			tst (sp)+
+			
+end_ec:		wait
+			br end_ec	
+			
+;			movb r0, input(r1)
+;			cmpb input(r1), arr_end
+;			beq outp
+;			inc r1
+;			cmp r1, #100
+;			bne get_loop
+;			mov (sp)+, r1
+;			
+;outp:		clr count
+;			mov #101, @#tks
+;			mov #100, @#cls
+;end_ec:		wait
+;			br end_ec
+;			cmpb arr_end, input(r1)
+;			bne end_ec
+		
+		
+		halt
+		
+getc:	mov #101, @#tks
+		tstb @#tks
+		bpl .-4
+		movb @#tkb, r0
+		
+putc:	tstb @#tps
+		bpl .-4
+		movb r0, @#tpb
+		rts pc
+
+
+		
+echo:	clr count
+		mov #tkb, -(sp)
+		iot
+		tst (sp)+
+		mov #101, @#tks
+		rti
+
+print:	tstb @#tps
+		bpl print
+		movb @4(sp), @#tpb
+		rti
+		
+clock:	inc count
+		cmp count, timeout
+		blt endclk
+		clr count
+		mov #bell, -(sp)
+		iot
+		tst (sp)+
+endclk:	rti
+		
+count: 		.blkw 1
+timeout: 	.word 3600
+input:		.blkw 100		
+label: 		.ascii <Welcome to 301729547 301731998's game \r\n/ > 
+ec_tst: 	.ascii <echo test, press keys and see them on screen:\r\n/>
+arr_end: 	.ascii </>
+			.even
+w8:			.ascii <$>
+bell: 		.byte 7

@@ -1,0 +1,175 @@
+; This counting algorithm goes from the top left square to the bottom right.
+; Based on the color of Player we assign the starting point, the distance 
+; which we check if the piece can move and the finishing point.
+; White player we check 'backwards' and black player we check 'forward'
+; We also assign a memory slot to keep the number of the other player for 
+; easy comparison.
+
+. = torg + 500
+finish: .word 0
+distance: .word 0
+current: .word 0
+Player2: .word 0
+
+main:    		mov #0 , NumMoves 				; sets NumMoves to 0
+				cmp	Player, #1					; assigns move patterns based on color
+				beq assignWhite
+				br assignBlack					; --
+	mainLoop:	cmp current, finish				; check if we are done
+				bgt done						; --
+				mov #Board, r5					; checks if correct color being checked
+				add current, r5
+				cmp @r5, Player
+				beq m0
+				add #2, current	
+				br mainLoop						;--
+	m0:			mov #16., r0					;reset r0 for left edge check 
+				br checkLeftEdge				; check if the current position is on the left edge
+	m1:			mov #14., r0					;reset r0 for right edge check
+				br checkRightEdge				; check if the current position is on the right edge
+	m2:			jmp handleMiddle					; deals with pieces that are  not on any edge
+	done:		halt			
+			
+
+				
+assignWhite:  	mov #16., current				; assigns move patterns based on color
+				mov #124., finish				; last tile
+				mov #-18., distance	
+				mov #2, Player2
+				br mainLoop
+				
+				
+assignBlack: 	mov #2, current					; assigns move patterns based on color
+				mov #110., finish				; last tile
+				mov #14., distance	
+				mov #1, Player2
+				br mainLoop
+				
+				
+checkLeftEdge:	cmp current, r0
+				beq handleLeftEdge 				; handles left edge position
+				add #16., r0
+				cmp current, r0
+				bge checkLeftEdge				; loops this check until done
+				br m1							; returns to the next stage of main if the current position wasn't on the left edge
+	
+	
+handleLeftEdge:	mov #Board, r0					; set r0 to point to the position to check
+				add current, r0
+				add distance, r0
+				add #4, r0						;--
+				cmp @r0, #0						; check if empty
+				bne lft1
+				add #1, NumMoves				; if empty: move up current, increase NumMoves and go back to the start of the main loop
+				add #2, current					; otherwise check if edible
+				br mainLoop						;--
+	lft1:		mov current, r1					; checks if edible option is inside the board 
+				add distance, r1
+				add distance, r1
+				add #8., r1
+				cmp #0, r1
+				bgt lft2
+				cmp r1, #124.
+				bgt lft2						;--
+				cmp @r0, Player2				; checks if edible, if not moves current and returns to main
+				bne lft2						; if is, adds 1 to NumMoves
+				add distance, r0				
+				add #4, r0						
+				cmp @r0, #0
+				bne lft2
+				add #1, NumMoves
+	lft2:		add #2, current
+				br mainLoop						;--
+				
+				
+checkRightEdge:	cmp current , r0
+				beq handleRightEdge
+				add #16., r0
+				cmp current , r0
+				bge checkRightEdge				; loops this check until done
+				br m2							; returns to the next stage of main if the current position wasn't on the right edge
+
+
+handleRightEdge:mov #Board, r0					; set r0 to point to the position to check
+				add current, r0
+				add distance, r0				;--
+				cmp @r0, #0						; check if empty
+				bne rt1
+				add #1, NumMoves				; if empty: move up current, increase NumMoves and go back to the start of the main loop
+				add #2, current					; otherwise check if edible
+				jmp mainLoop						;--
+	rt1:		mov current, r1					; checks if edible option is inside the board 
+				add distance, r1
+				add distance, r1
+				cmp #0, r1
+				bgt rt2
+				cmp r1, #124.
+				bgt rt2							;--
+				cmp @r0, Player2				; checks if edible, if not moves current and returns to main
+				bne rt2							; if is, adds 1 to NumMoves
+				add distance, r0
+				cmp @r0, #0
+				bne rt2
+				add #1, NumMoves
+	rt2:		add #2, current
+				jmp mainLoop						;--
+	
+	
+handleMiddle:	mov #Board, r0					; set r0 to point to the position to check
+				add current, r0
+				add distance, r0				;--
+				cmp @r0, #0						; check if empty
+				bne mid1
+				add #1, NumMoves				; if empty: move up current, increase NumMoves and go back to the start of the main loop
+												; otherwise check if edible
+				br mid2							;--
+	mid1:		mov current, r1					; test if can eat inside the board
+				add distance, r1
+				clr r2							
+	edgetl:		add #16., r2
+				cmp r1, r2
+				beq mid2
+				bgt edgetl
+				add distance, r1
+				cmp #0, r1
+				bgt mid2
+				cmp r1, #124.
+				bgt mid2						;--
+				cmp @r0, Player2				; checks if edible, if not moves current and returns to main
+				bne mid2						; if is, adds 1 to NumMoves
+				add distance, r0
+				cmp @r0, #0
+				bne mid2
+				add #1, NumMoves				;--
+	mid2:		mov #Board, r0					; set r0 to point to the position to check
+				add current, r0
+				add distance, r0
+				add #4, r0						;--
+				cmp @r0, #0						; check if empty
+				bne mid3
+				add #1, NumMoves				; if empty: move up current, increase NumMoves and go back to the start of the main loop
+				add #2, current					; otherwise check if edible
+				jmp mainLoop						;--
+	mid3:		mov current, r1					; test if can eat inside the board
+				add distance, r1
+				add #4, r1
+				mov #-2, r2							
+	edgetr:		add #16., r2
+				cmp r0, r2
+				beq mid4
+				bgt edgetr
+				add distance, r1
+				add #4., r1
+				cmp #0, r1
+				bgt mid4
+				cmp r1, #124.
+				bgt mid4						;--
+				cmp @r0, Player2				; checks if edible, if not moves current and returns to main
+				bne mid4						; if is, adds 1 to NumMoves
+				add distance, r0				
+				add #4, r0						
+				cmp @r0, #0
+				bne mid4
+				add #1, NumMoves
+	mid4:		add #2, current
+				jmp mainLoop					;--

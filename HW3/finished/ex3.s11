@@ -1,0 +1,1157 @@
+.= torg + 3000
+main:		mov #main, sp 					;create the stack
+			mov #SrcPos, -(sp)
+			mov #DstPos, -(sp)
+			mov #WinParam, -(sp)
+			jsr pc, getMaxWp
+			cmp (sp)+, (sp)+
+			tst(sp)+
+			halt
+
+;the initial preperation. this would be the "main" if the soul purpose was the recurtion
+
+getMaxWp:
+			mov @#Player, @#CurPlay
+			mov @#Steps, @#CurStep
+			jsr pc,	Start					;starting getMaxWp
+			mov @#WinParam, @2(sp)
+			mov @#BestDst, @4(sp)
+			mov @#BestSrc, @6(sp)
+			rts pc
+CurPlay: .word 0	
+CurStep: .word 0	
+
+;the main wrapper function, it is called in every recurtion and makes sure that all the prior 
+;register info is saved, it also flips the current player before entering a recurtion and 
+;unflips it after the recurtion is done. same is done with substracting the current steps count
+
+getMax:	
+			jsr pc, SwapPly					;Preperations For the Recurtion, 
+			dec @#CurStep
+Start:		mov r0, -(sp)					
+			mov r1, -(sp)					
+			mov r2, -(sp)
+			mov r3, -(sp)
+			mov r4, -(sp)					
+			mov r5, -(sp)
+			jsr pc, getAux	
+			mov (sp)+, r5					
+			mov (sp)+, r4
+			mov (sp)+, r3
+			mov (sp)+, r2					
+			mov (sp)+, r1
+			mov (sp)+, r0	
+			jsr pc, SwapPly					;undo the Recurtion prep, 
+			inc @#CurStep
+			rts pc
+
+;the auxsilery recurtion, in every call the function checks if there are still moves left. 
+;if there are, it checks before starting the recurtion if the position is a win or lose state,
+;if this is an end point we calculate the win param according to the minormax
+;if this isnt an end point this function will call MovRec.
+
+getAux:
+			tst @#CurStep						; if(CurStep == 0) {
+			bne gap1
+			;jsr pc, SwapPly
+fold:		mov r4, -(sp)					;save r4 because CalcWP needs it
+			mov #Board, -(sp)				;Preperations For the CalcWP
+			mov @#CurPlay,-(sp)				;
+			jsr pc, calcWP
+			cmp (sp)+, (sp)+
+			mov r4, -(sp)
+			mov @#CurPlay, -(sp)					;put Current Player number in the stack
+			mov #Player, -(sp)					;put Player address in the stack
+			jsr pc, minOrMax
+			cmp (sp)+, (sp)+
+			mov r5, -(sp)
+			mov r4, -(sp)
+			mul 4(sp), r4 						;(minOrMax value) * (WinParam)
+			jsr pc, calcMOM						;  } endif(CurStep == 0)
+			tst (sp)+
+			mov (sp)+, r5
+			tst (sp)+
+			mov (sp)+, r4
+			jmp AuxEnd
+
+			
+			
+prep:		mov (sp)+, r2
+			jmp fold			
+			
+gap1:		mov r2, -(sp)
+			mov #Board, -(sp)
+			mov @#CurPlay, -(sp)	
+			tst -(sp)						;place for result for checkWin
+			jsr pc, checkWin
+			mov (sp)+, r2
+			cmp (sp)+, (sp)+					;test checkWin result
+			cmp r2, #1
+			beq prep
+			mov (sp)+, r2
+			jsr pc, MovRec
+			jmp AuxEnd			
+AuxEnd:		rts pc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@  ex2, NumMoves  @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+NumMoves:.word 0	
+;nummoves is the original ex2 code, saving all the registers data and using: r0 as board index
+;r1 as board address pointer, r2 as internal function register, r4,r5 as calculating space (div)		
+			
+NumOfMov:	
+			mov r0, -(sp)					
+			mov r1, -(sp)					
+			mov r2, -(sp)
+			mov r4, -(sp)					
+			mov r5, -(sp)
+			mov #2, r0
+loop:		mov Board(r0), r1
+			tst r1
+			beq endl
+			cmp @#CurPlay, r1
+			bne endl
+			cmp @#CurPlay, #2
+			beq Black
+White:		jsr r2, chkMove1
+			br  endl
+Black:		jsr r2, chkMove2
+			
+endl:		add #2, r0
+			cmp r0, #176 					;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	loop
+			mov (sp)+, r5					
+			mov (sp)+, r4					
+			mov (sp)+, r2					
+			mov (sp)+, r1					
+			mov (sp)+, r0
+			rts pc
+
+chkMove1:	cmp r1, #1 						;assert equivilant, was checked before the function
+			bne endM1
+			cmp r0, #20 					;checks if first row a.k.a no moves
+			bmi endM1
+			mov r0, r5
+			sub #16, r5 					;checks if the curr index is in the right col a.k.a no moves right
+			clr r4							;calculation in octal: the most right col is (20*x + 16)
+			div #20, r4						;because of that substracting 16 and div by 20 gives a hole number
+			tst r5							;only if we are in the right row
+			beq upLeft
+			
+upRigt:										;the up right move from r0
+			cmp Board-16(r0), #1 			;substracting 16 in a 10*10 size board 
+			beq upLeft						;is the location of one up one right move
+			cmp 4762(r0), #0	
+			beq resUR
+			clr r4
+			cmp r0, #42 					;is it possible to eat, substracting 42 in octal makes sure we are in 3rd row
+			bmi upLeft
+			mov r0, r5
+			sub #14, r5 					;to round index for devision checks the 2nd most right col 
+			div #20, r4 					;check if the curr spot is one tile from edge 
+			tst r5			
+			beq upLeft
+			cmp Board-34(r0), #0 			;5000-34= 2 up 2 right	
+			bne upLeft
+resUR:		add #1, @#NumMoves
+			
+upLeft:		mov r0, r5
+			clr r4							;checks if left border col
+			div #20, r4		
+			tst r5
+			beq endM1		
+			cmp Board-22(r0), #1 			;the up left move from r0
+			beq endM1
+			cmp Board-22(r0), #0 
+			beq resUL
+			clr r4
+			cmp r0, #46 					;is it possible to eat
+			bmi endM1
+			mov r0, r5
+			sub #2, r5 						;check if curr is 2nd left col
+			div #20, r4
+			tst r5
+			beq endM1
+			cmp Board-44(r0), #0 			;is the jump across the player empty
+			bne endM1
+resUL:		add #1, @#NumMoves					
+endM1:		rts r2
+
+chkMove2:	cmp r1, #2
+			bne endM2
+			cmp r0, #160 					;checks if curr spot is last row a.k.a no moves 
+			bpl endM2	 					;because the amount of cells are 176 and first in the last row is index 160
+			mov r0, r5
+			sub #16, r5 					;checks if right col a.k.a no moves right
+			clr r4			
+			div #20, r4 
+			cmp r5, #0
+			beq dnLeft
+			
+dnRigt:		cmp Board+22(r0), #2 			;the down right move from r0 is excatly 8 cells
+			beq dnLeft						;which means its the one exactly below, adding 2 in one
+			cmp Board+22(r0), #0			;more move to the right
+			beq resDR
+			clr r4
+			cmp r0, #132 					;is it possible to eat
+			bpl dnLeft
+			mov r0, r5
+			sub #14, r5
+			div #20, r4 					;check if the curr spot is in the 2nd right col 
+			tst r5		
+			beq dnLeft
+			cmp Board+44(r0), #0 			;is the jump down right over a white piece is empty
+			bne dnLeft		
+resDR:		add #1, @#NumMoves
+			
+dnLeft:		mov r0, r5
+			clr r4							;checks if left col a.k.a no moves left
+			div #20, r4 
+			tst r5
+			beq endM1		 
+			cmp Board+16(r0), #2 			;the down left move from r0 
+			beq endM2	
+			cmp Board+16(r0), #0
+			beq resDL
+			clr r4
+			cmp r0, #136 					;checks if in 2nd row from bottom 
+			bpl endM2
+			mov r0, r5
+			sub #2, r5						;checks if the curr spot is in 2nd left col
+			div #20, r4 
+			tst r5
+			beq endM2
+			cmp Board+34(r0), #0 			;is the jump down left over a white piece is empty
+			bne endM2		
+resDL:		add #1, @#NumMoves				
+endM2:		rts r2 			
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@  MovRec (Recurtion Call)  @@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;the moving piece of the recurtion, based on the Num Of Moves code. if found a legal move
+;the move is made and there is a call to the recurtion. after the rec is returned, the win param of that move
+;is checked and if the value of that move is better then what was made before, it updates the win param and the best 
+;src and dst accordingly.in any case the move made is undone and the next legal move is found and so on..
+;in the end of a cycle of move rec, the board is set as before and the best src and dst and win param are found
+;and inputed
+
+MovRec:		mov r0, -(sp)					
+			mov r1, -(sp)					
+			mov r2, -(sp)
+			mov r3, -(sp)
+			mov r4, -(sp)					
+			mov r5, -(sp)
+			mov r4, -(sp)
+			mov @#CurPlay, -(sp)	;put Current Player number in the stack
+			mov #Player, -(sp)	;put Player address in the stack
+			jsr pc, minOrMax
+			tst r4
+			bmi jump1
+			mov #-21, @#WinParam
+			br ret1
+jump1:		mov #21, @#WinParam	
+ret1:		cmp(sp)+, (sp)+
+			mov (sp)+, r4
+			mov r4, -(sp)
+			mov @#CurPlay, -(sp)	;put Current Player number in the stack
+			mov #Player, -(sp)	;put Player address in the stack
+			jsr pc, minOrMax
+			mov r4, r3
+			cmp (sp)+, (sp)+
+			mov (sp)+, r4
+			mov #2, r0
+loopR:		
+			mov Board(r0), r1
+			tst r1
+			beq endlR
+			cmp @#CurPlay, r1
+			bne endlR
+			cmp @#CurPlay, #2
+			beq Blck
+Whte:		jsr r2, chkMvW
+			br  endlR
+Blck:		jsr r2, chkMvB
+			
+endlR:		add #2, r0
+			cmp r0, #176 
+			bmi	loopR
+			cmp @#WinParam, #21
+			beq	forceWP
+			cmp@#WinParam, #-21
+			beq forceWP
+aft1:		mov (sp)+, r5					
+			mov (sp)+, r4
+			mov (sp)+, r3
+			mov (sp)+, r2					
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+			
+forceWP:	mov r4, -(sp)
+			mov r5, -(sp)								;save r4 because CalcWP needs it
+			mov #Board, -(sp)				;Preperations For the CalcWP
+			mov @#CurPlay,-(sp)				;
+			jsr pc, calcWP
+			mul r3, r4
+			mov r5, @#WinParam
+			cmp (sp)+, (sp)+
+			mov (sp)+, r5
+			mov (sp)+, r4
+			tst @#CurStep
+			bne forceAux
+			jmp aft1
+
+forceAux:	jsr pc, getMax
+			jmp aft1
+			
+updateSD:	cmp @#CurStep, @#Steps
+			bne udRet
+			mov @#SrcPos, @#BestSrc
+			mov @#DstPos, @#BestDst
+udRet:		rts pc
+			
+BestSrc:	.word 0
+BestDst:	.word 0
+
+chkMvW:		cmp r1, #1 
+			bne endMvW1
+			cmp r0, #20 
+			bmi endMvW1
+			mov r0, r5
+			sub #16, r5 
+			clr r4		
+			div #20, r4	
+			tst r5		
+			beq con2
+			
+upRgt:		
+			cmp Board-16(r0), #1 
+			beq con2			
+			cmp Board-16(r0), #0	
+			beq movUR
+			clr r4
+			cmp r0, #42
+			bmi con2
+			mov r0, r5
+			sub #14, r5 
+			div #20, r4 
+			tst r5		
+			beq upLft
+			cmp Board-34(r0), #0 
+			beq jumpUR
+			br upLft
+con2:		jmp upLft			
+movUR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #16, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3						;minormax
+			bmi min1
+			cmp @#WinParam, (sp)
+			bge gap19
+			br gapWp1
+min1:		cmp @#WinParam, (sp)
+			ble gap19
+gapWp1:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br upLft
+gap19:		jsr pc, updateSD
+gap4:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br upLft
+endMvW1:	br endMvW
+			
+jumpUR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #34, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3
+			bmi min2
+			cmp @#WinParam, (sp)
+			bge gap18
+			br gapWp2
+min2:		cmp @#WinParam, (sp)
+			ble gap18
+gapWp2:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br upLft
+gap18:		jsr pc, updateSD
+gap5:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			
+upLft:		mov r0, r5
+			clr r4			
+			div #20, r4		
+			tst r5
+			beq endMvW		
+			cmp Board-22(r0), #1 
+			beq endMvW
+			cmp Board-22(r0), #0 
+			beq movUL
+			clr r4
+			cmp r0, #46 				
+			bmi endMvW
+			mov r0, r5
+			sub #2, r5 	
+			div #20, r4
+			tst r5
+			beq endMvW
+			cmp Board-44(r0), #0 
+			beq jumpUL					
+endMvW:		rts r2
+
+movUL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #22, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3
+			bmi min3
+			cmp @#WinParam, (sp)
+			bge gap17
+			br gapWp3
+min3:		cmp @#WinParam, (sp)
+			ble gap17
+gapWp3:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+gap17:		jsr pc, updateSD
+gap6:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+			
+jumpUL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			sub #44, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3
+			bmi min4
+			cmp @#WinParam, (sp)
+			bge gap16
+			br gapWp4
+min4:		cmp @#WinParam, (sp)
+			ble gap16
+gapWp4:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+gap16:		jsr pc, updateSD
+gap7:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvW
+
+chkMvB:		cmp r1, #2
+			bne endMvB1
+			cmp r0, #160 
+			bpl endMvB1	 
+			mov r0, r5
+			sub #16, r5 
+			clr r4		
+			div #20, r4 
+			cmp r5, #0
+			beq con1
+
+dnRgt:		cmp Board+22(r0), #2 
+			beq con1		
+			cmp Board+22(r0), #0
+			beq movDR
+			clr r4
+			cmp r0, #132 
+			bpl con1
+			mov r0, r5
+			sub #14, r5
+			div #20, r4 
+			tst r5	
+			beq dnLft
+			cmp Board+44(r0), #0
+			beq jumpDR
+			br dnLft	
+con1:		jmp dnLft	
+movDR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #22, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3
+			bmi min5
+			cmp @#WinParam, (sp)
+			bge gap15
+			br gapWp5
+min5:		cmp @#WinParam, (sp)
+			ble gap15
+gapWp5:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br dnLft
+gap15:		jsr pc, updateSD
+gap8:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br dnLft
+endMvB1:	br endMvB
+			
+jumpDR:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #44, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3
+			bmi min6
+			cmp @#WinParam, (sp)
+			bge gap14
+			br gapWp6
+min6:		cmp @#WinParam, (sp)
+			ble gap14
+gapWp6:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br dnLft
+gap14:		jsr pc, updateSD
+gap9:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			
+dnLft:		mov r0, r5
+			clr r4	
+			div #20, r4 
+			tst r5
+			beq endMvB		 
+			cmp Board+16(r0), #2 
+			beq endMvB	
+			cmp Board+16(r0), #0
+			beq movDL
+			clr r4
+			cmp r0, #136 
+			bpl endMvB
+			mov r0, r5
+			sub #2, r5	
+			div #20, r4 
+			tst r5
+			beq endMvB
+			cmp Board+34(r0), #0 
+			beq jumpDL			
+endMvB:		rts r2 
+
+movDL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #16, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3
+			bmi min7
+			cmp @#WinParam, (sp)
+			bge gap13
+			br gapWp7
+min7:		cmp @#WinParam, (sp)
+			ble gap13
+gapWp7:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+gap13:		jsr pc, updateSD
+gap10:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+			
+jumpDL:	
+			clr @#SrcPos
+			add r0, @#SrcPos
+			asr @#SrcPos
+			clr @#DstPos
+			add r0, @#DstPos
+			add #34, @#DstPos
+			asr @#DstPos
+			mov r5, -(sp)
+			mov #Board, -(sp)
+			jsr	r5, movPiece
+			.word SrcPos, DstPos
+			mov @#WinParam, -(sp)
+			mov @#SrcPos, -(sp)
+			mov @#DstPos, -(sp)
+			jsr pc, getMax
+			mov (sp)+,  @#DstPos
+			mov (sp)+,  @#SrcPos
+			jsr r5, undoMov				;undoes the move for the same scr and dst
+			.word SrcPos, DstPos
+			tst r3
+			bmi min8
+			cmp @#WinParam, (sp)
+			bge gap12
+			br gapWp8
+min8:		cmp @#WinParam, (sp)
+			ble gap12
+gapWp8:		mov (sp)+,	@#WinParam
+			tst (sp)+					;pop  board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+gap12:		jsr pc, updateSD
+gap11:		cmp (sp)+, (sp)+					;pop wp, board
+			mov (sp)+, r5				;returns old vlavue to r5
+			br endMvB
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     MovPiece    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;moves the player from a given source to a given dst. if the move is a jump (the legality of it is checked already)
+;the player who was eaten is cleared from the board
+
+movPiece:	
+			mov @(r5)+, -(sp)	; Putting SrcPos in stack
+			asl (sp)			; SrcPos*=2
+			add 4(sp), (sp)		; SrcPos+=Board
+			mov @(r5)+, -(sp)	; Putting DstPos in stack 
+			asl (sp)			; DstPos*=2
+			add 6(sp), (sp)		; DstPos*=2
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			tst (sp)
+			bpl pushBlk
+			bmi pushWht
+zuruk:		cmp @4(sp),	#1		;compare SrcPos to White
+			beq makeMvW
+			br	makeMvB		
+endR5:		cmp (sp)+, (sp)+
+			tst (sp)+
+			rts r5	
+			
+pushBlk:	mov #2, @#CurPlay
+			jmp zuruk
+pushWht:	mov #1, @#CurPlay
+			jmp zuruk
+			
+makeMvW:
+			cmp (sp), #-44
+			beq makeCh1
+			cmp (sp), #-34
+			beq makeCh2
+			cmp (sp), #-16
+			beq makeCh5
+			cmp (sp), #-22
+			beq makeCh5
+			jmp endR5
+
+makeMvB:
+			cmp (sp), #44
+			beq makeCh3
+			cmp (sp), #34
+			beq makeCh4
+			cmp (sp), #16
+			beq makeCh5
+			cmp (sp), #22
+			beq makeCh5
+			jmp endR5			
+
+
+makeCh1:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #22, (sp)		; *temp=*Board+SrcPos-22
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #1, @(sp)		; temp=1 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5		
+
+			
+makeCh2:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #16, (sp)		; *temp=*Board+SrcPos-16
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #1, @(sp)		; temp=1 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5			
+	
+makeCh3:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #22, (sp)		; *temp=*Board+SrcPos+22
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #2, @(sp)		; temp=2 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5			
+	
+makeCh4:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #16, (sp)		; *temp=*Board+SrcPos+16
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov #2, @(sp)		; temp=2 (put WHITE where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR5
+makeCh5:	
+			mov 0, -(sp)		; *temp=0
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			mov @#CurPlay, @(sp); temp=CurPlay (Puts the Number of the 
+								; player in CurPlay in the index that temp was pointing)
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			tst (sp)+
+			jmp endR5
+
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     UndoMov     @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;recives a source and dst and puts the player back in the source and clears the dst.
+;if the player did a jump, the adversery player is restored in the middle spot of the jump			
+
+undoMov:	
+			mov @(r5)+, -(sp)
+			asl (sp)
+			add 6(sp), (sp)
+			mov @(r5)+, -(sp)
+			asl (sp)
+			add 10(sp), (sp)
+			mov 0, -(sp)		; calculation = 0
+			add 2(sp), (sp)  	; calculation = 0+DstPos
+			sub 4(sp), (sp)		; calculation = 0+DstPos-SrcPos
+			cmp @2(sp),	#1		;compare DstPos to White
+			beq mkMvW2
+			br	mkMvB2
+endR55:		cmp(sp)+, (sp)+
+			tst (sp)+
+			rts r5	
+			
+mkMvW2:
+			cmp (sp),	#-44	;checking if DstPos memory address minus the SrcPos 
+			beq makeCh11		;memory Address is equal to -44
+			cmp (sp),	#-34	;checking if DstPos memory address minus the SrcPos
+			beq makeCh22		;memory Address is equal to -34
+			cmp (sp),	#-22	;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to -44
+			cmp (sp),	#-16	;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to -44
+			jmp endR55
+
+mkMvB2:
+			cmp (sp),	#44		;checking if DstPos memory address minus the SrcPos
+			beq makeCh33		;memory Address is equal to 44
+			cmp (sp),	#34		;checking if DstPos memory address minus the SrcPos
+			beq makeCh44		;memory Address is equal to 34
+			cmp (sp),	#22		;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to 22
+			cmp (sp),	#16		;checking if DstPos memory address minus the SrcPos
+			beq makeCh55		;memory Address is equal to 16
+			jmp endR55			
+
+
+makeCh11:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #22, (sp)		; *temp=*Board+SrcPos-22
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+
+			
+makeCh22:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			sub #16, (sp)		; *temp=*Board+SrcPos-16
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+	
+makeCh33:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #22, (sp)		; *temp=*Board+SrcPos+22
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+	
+makeCh44:	mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			add #16, (sp)		; *temp=*Board+SrcPos+16
+			mov #1 ,@(sp)		; temp=0 (put WHITE where temp was pointing), Middle of Jump
+			clr(sp)				; *temp=0 (reset pointer)
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov #2 ,@(sp)		; temp=0 (put BLACK where temp was pointing), Source
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+DstPos
+			clr @(sp)			; temp=1 (put zero where temp was pointing), Destination
+			clr(sp)				; *temp=0 (reset pointer)
+			tst (sp)+
+			jmp endR55			
+makeCh55:
+			mov 0, -(sp)		; *temp=0
+			add 6(sp), (sp)		; *temp=*Board+SrcPos
+			mov @#CurPlay, @(sp); temp=CurPlay (Puts the Number of the 
+								; player in CurPlay in the index that temp was pointing)
+			clr(sp)				; *temp=0 (reset pointer)
+			add 4(sp), (sp)		; *temp=*Board+SrcPos
+			clr @(sp)			; temp=0 (put zero where temp was pointing), Source
+			tst (sp)+
+			jmp endR55		
+
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     CheckWin    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@	
+
+;checks if CalcWP returns 20, if it does, checkWin returns 1, else checkWin returns -1		
+
+checkWin:
+			mov r4, -(sp)					;save r4 because CalcWP needs it
+			mov 10(sp), -(sp)				; #Board Preperations For the CalcWP
+			mov 10(sp),-(sp)				; @#CurPlay
+			jsr pc, calcWP					
+			cmp (sp)+, (sp)+				;pop Board and CurPlay used in CalcWP
+			cmp r4, #20
+			beq plWin
+plNotWin:	mov #-1, 4(sp)
+			mov (sp)+, r4
+			rts pc
+plWin:		mov #1,	4(sp)
+			mov (sp)+, r4
+			rts pc							
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     CalcWP      @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;using r0 as index to run on the board, r1 as board+index holder 
+; and running on board to find: 
+;if there are no players of the "other" player return win
+;if i have no players return lose
+;else if there are no moves, find which player has more moves and set winner accordingly
+;if there are still moves, there is no relevant win parameter
+
+countBd:	mov #2, r0			; running on the Board
+loopCa:		clr r1
+			add r0,r1
+			add 16(sp),	r1		;board address
+			tst r1
+			beq endlCa
+			cmp (r1), #0
+			bne checkPl			;check if the place contains 0
+endlCa:		add #2, r0
+			cmp r0, #176 		;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	loopCa
+			rts pc
+checkPl:						; increasing the correct player soldiers count
+			cmp (r1),	#1
+			beq incWh
+incBl:		inc 4(sp)
+			br endlCa
+incWh:		inc 2(sp)
+			br endlCa			
+			
+calcWP:		
+			mov r0,	-(sp)		; saving r0
+			mov r1,	-(sp)		; saving r1
+			clr	r0
+			mov 0, -(sp)		;place for black count
+			mov 0, -(sp)		;place for white count
+			jsr	pc,	countBd		; entering countBoard
+			cmp 12(sp),	#1		;checking which player it is and calculating NUM white - NUM black
+			beq calW
+			br calB
+endCalc:	cmp (sp)+, (sp)+
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+		
+calB:		cmp #0, (sp)
+			beq WinWP
+			cmp #0, 2(sp)
+			beq LoseWP
+			jsr pc, chkMv
+			sub	(sp),	2(sp)
+			tst NumMoves
+			bne midWPb
+			tst 2(sp)
+			beq midWPb
+			bpl	WinWP
+			bmi LoseWP
+midWPb:		mov 2(sp),	r4
+			br endCalc
+		
+calW:		cmp #0, 2(sp)
+			beq WinWP
+			cmp #0, (sp)
+			beq LoseWP
+			jsr pc, chkMv
+			sub 2(sp),	(sp)
+			tst NumMoves
+			bne midWPw
+			tst (sp)
+			beq midWPw
+			bpl	WinWP
+			bmi LoseWP
+midWPw:		mov (sp),	r4
+			br endCalc
+			
+			
+WinWP:		mov #20, r4
+			br endCalc
+LoseWP:		mov #-20, r4
+			br endCalc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     chkMv       @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;checking the total moves possible in the board according to the 
+;ex2 Number Of Moves calculator
+			
+chkMv:		clr @#NumMoves					; Clearing Num Moves label to see if there 					
+			jsr pc, NumOfMov
+			jsr pc, SwapPly
+			jsr pc, NumOfMov
+			jsr pc, SwapPly
+			rts pc
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     MinOrMax    @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;looking at the current player compared to the original player recived in stack to 
+;calculate -1 for the adversary player or 1 for the original player
+
+minOrMax:	cmp 4(sp), @2(sp)	; checking if the Player wanted is the current one and 					
+			beq	isPl			; putting the correct value into r4
+			mov #-1, r4
+			rts pc
+isPl:		mov #1,	r4
+			rts pc
+			
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@     SwapPly     @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;swaping the value of current player from 1 to 2 or the other way around
+
+SwapPly: 	cmp @#CurPlay, #1
+			beq Swap2B
+			mov #1, @#CurPlay
+			rts pc
+Swap2B:		mov #2, @#CurPlay
+			rts pc
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@     calcMinOrMax (calcMOM)      @@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@			
+
+;reciving in r5 the (Win Param) * (minOrMax)
+;and using the min or max in stack to calculate if we need the
+;maximal or minimal win param
+
+calcMOM:	jsr pc, OddEven
+			tst Flag
+			beq evn
+odd:		tst 2(sp)
+			bpl min
+			cmp r5, @#WinParam
+			bgt put
+			rts pc
+min:		cmp r5, @#WinParam
+			blt put
+			rts pc
+			
+put:		mov r5, @#WinParam
+			rts pc			
+			
+evn:		tst 2(sp)
+			bmi min9
+			cmp r5, @#WinParam
+			bgt put2
+			rts pc
+min9:		cmp r5, @#WinParam
+			blt put2
+			rts pc
+			
+put2:		mov r5, @#WinParam
+			rts pc	
+
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@            EvenOdd 	          @@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@			
+			
+;using r4 and r5 to calculate if the current step is even or odd
+			
+OddEven:	mov r4, -(sp)
+			mov r5, -(sp)
+			clr r4
+			mov @#CurStep,	r5
+			div #2,	r4
+			cmp r5, #0
+			bne odd2
+			mov (sp)+,	r5
+			mov (sp)+,	r4
+			mov #1,	@#Flag
+			rts pc
+odd2:		mov (sp)+,	r5
+			mov (sp)+,	r4
+			mov #0,	@#Flag
+			rts pc
+
+Flag: .word 0		
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@       END       @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+			
+
+
+	

@@ -1,0 +1,128 @@
+
+main:		jsr pc, calcWP
+			halt
+
+
+countBd:	mov #2, r0			; running on the Board
+loopCa:		clr r1
+			add r0,r1
+			add 16(sp),	r1		;board address
+			tst r1
+			beq endlCa
+			cmp (r1), #0
+			bne checkPl			;check if the place contains 0
+endlCa:		add #2, r0
+			cmp r0, #176 		;.64 cells of 2 addresses each .(64*2) in octal
+			bmi	loopCa
+			rts pc
+checkPl:						; increasing the correct player soldiers count
+			cmp (r1),	#1
+			beq .+10			;beq incWh
+			inc 4(sp)
+			br endlCa
+			inc 2(sp)			;incWh
+			br endlCa			
+			
+calcWP:		
+			mov r0,	-(sp)		; saving r0
+			mov r1,	-(sp)		; saving r1
+			clr	r0
+			mov 0, -(sp)		;place for black count
+			mov 0, -(sp)		;place for white count
+			jsr	pc,	countBd		; entering countBoard
+			cmp 12(sp),	#1		;checking which player it is and calculating NUM white - NUM black
+			beq calW
+			br calB
+endCalc:	cmp (sp)+, (sp)+
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+		
+calB:		cmp #0, (sp)
+			beq WinWP
+			cmp #0, 2(sp)
+			beq LoseWP
+			jsr pc, chkMv
+			sub	(sp),	2(sp)
+			tst NumMoves
+			bne .+14			;bne midWPb
+			tst 2(sp)	
+			beq .+6				;beq midWPb
+			bpl	WinWP
+			bmi LoseWP
+			mov 2(sp),	r4		;midWPb
+			br endCalc
+		
+calW:		cmp #0, 2(sp)
+			beq WinWP
+			cmp #0, (sp)
+			beq LoseWP
+			jsr pc, chkMv
+			sub 2(sp),	(sp)
+			tst NumMoves
+			bne .+12			;bne midWPw
+			tst (sp)
+			beq .+6				;beq midWPw
+			bpl	WinWP
+			bmi LoseWP
+			mov (sp),	r4		;midWPw
+			br endCalc
+			
+			
+WinWP:		mov #20, r4
+			br endCalc
+LoseWP:		mov #-20, r4
+			br endCalc
+cr = 15			
+midIllg: halt	
+chkMv:		halt		
+Flag: .word 0		
+NumMoves:	 .word 1
+
+stopMsg1:	.ascii <WP for white player is / > 
+stopMsg2:	.ascii <WP for black player is / >
+stopMsg3:	.ascii <White player wins!/ >
+stopMsg4:	.ascii <Black player wins!/ >
+stopMsg5:	.ascii <Its a tie!/ >
+
+putc: halt
+put: .word 0
+min: .word 0
+Board:			.word	0, 2, 0, 2, 0, 2, 0, 2
+				.word	2, 0, 2, 0, 2, 0, 2, 0
+				.word	0, 2, 0, 2, 0, 2, 0, 2
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	0, 0, 0, 0, 0, 0, 0, 0
+				.word	1, 0, 1, 0, 1, 0, 1, 0
+				.word	0, 1, 0, 1, 0, 1, 0, 1
+				.word	1, 0, 1, 0, 1, 0, 1, 0
+
+Player:	.word	0
+Steps:  .word   0
+SrcPos: .word 0
+DstPos: .word 0
+WinParam: .blkw 0 
+CurPlay: .word 0	
+CurStep: .word 0	
+
+count: 		.blkw 1
+timeout: 	.word 3600
+bell: 		.byte 7
+			.even
+command:	.blkw 62
+cmdCount:	.word 0
+illgMsg:	.ascii <Cannot execute "/> 
+illgMsgE:	.ascii <"\r\n/> 
+stopMsg:	.ascii <stop message. \r\n\r\n/ > 
+strMsg:		.ascii <Starting a new game\r\n\r\n/> 
+strMsg1:	.ascii <White player is /> 
+strMsg2:	.ascii <Black player is /> 
+with:		.ascii < with />
+strMsgE:	.ascii < seconds per move\r\n\r\n/>
+firstNum:	.blkw 38
+secndNum:	.blkw 38
+firstP:		.word 0
+secondP:	.word 0
+strMsgH:	.ascii <Human/>
+strMsgC:	.ascii <Computer/>
+arr_end: 	.ascii </>

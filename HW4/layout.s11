@@ -1,0 +1,123 @@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@      Layout      @@@@@@@@@@@@@@@@@@@@@@@@@@@
+;@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+;Board message
+Layout:		mov r0, -(sp)
+			mov r1, -(sp)
+			mov r2, -(sp)
+			mov r4, -(sp)
+			mov r5, -(sp)
+			
+			clr r0
+			clr r1
+brdMLop:	movb BoardMsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, BoardMsg(r1)
+			bne brdMLop
+			
+;The actual board			
+			mov #2, r2
+brdLop:		mov Board(r2), r1
+			tst r1
+			bne nextW
+			mov #'_, r0
+			br endSpot
+nextW:		cmp #1, r1
+			bne nextB
+			mov #'W, r0
+			br endSpot
+nextB:		mov #'B, r0
+			
+endSpot:	jsr pc, putc
+			
+			mov r2, r5
+			sub #16, r5 					
+			clr r4							
+			div #20, r4						
+			tst r5							
+			beq nBrdLine
+retNline:	add #2, r2
+			cmp r0, #178 					
+			bmi	brdLop
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			jmp curpLop
+			
+
+nBrdLine:	mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			br retNline
+
+curpLop:	movb CurPmsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, CurPmsg(r1)
+			bne curpLop	
+			cmp @#CurPlay, #1
+			beq whiteLop
+blackLop:	movb blackMsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, blackMsg(r1)
+			bne blackLop
+			clr r0
+			clr r1
+			cmpb secondP, #'c
+			bne humEnd
+			br comEnd
+			
+			
+whiteLop:	movb whiteMsg(r1), r0
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, whiteMsg(r1)
+			bne whiteLop
+			clr r0
+			clr r1
+			cmpb firstP, #'c 
+			bne humEnd
+			br comEnd
+			
+			
+humEnd:		jsr pc, humLoop
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov (sp)+, r5
+			mov (sp)+, r4
+			mov (sp)+, r2
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+			
+comEnd:		jsr pc, compLoop
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov #cr, r0
+			jsr pc, putc
+			mov #lf, r0
+			jsr pc, putc
+			mov (sp)+, r5
+			mov (sp)+, r4
+			mov (sp)+, r2
+			mov (sp)+, r1
+			mov (sp)+, r0
+			rts pc
+
+BoardMsg:	.ascii <Board layout:\r\n\r\n/>
+CurPmsg:	.ascii <Current Player: />
+whiteMsg:	.ascii <White />
+blackMsg:	.ascii <Black />

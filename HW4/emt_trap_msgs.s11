@@ -1,0 +1,59 @@
+tks = 177560
+tkb = 177562
+tps = 177564
+tpb = 177566
+cls = 177546
+
+cr = 15
+lf = 12
+
+.= torg+30
+.word emtrap
+.word 340 		;priority 7
+
+
+.= torg+2000
+emtrap:		mov (sp), -(sp)
+			sub #2, (sp)
+			mov @0(sp), (sp)
+			bic #177400, (sp)
+			asl (sp)
+			add #emtable, (sp)
+			mov @0(sp), (sp)
+			jmp @(sp)+
+			
+emtable:	.word emt00		;intro message
+			.word emt01
+			.word emt02
+			.word emt03
+			.word emt04
+			.word emt05
+			.word emt06
+			.word emt07
+			
+emt00:		mov r0, -(sp)
+			mov r1, -(sp)
+			clr r1
+			movb introMSG(r1), r0			;introL:
+			jsr pc, putc
+			inc r1
+			cmpb arr_end, introMSG(r1)	
+			bne .-20						;bne introL:
+			mov (sp)+, r1
+			mov (sp)+, r1
+			rti
+			
+			
+			
+			
+			
+		
+putc:	tstb @#tps
+		bpl .-4
+		movb r0, @#tpb
+		rts pc
+		
+		
+		
+introMSG: 		.ascii <Welcome to 301729547 and 301731998's game \r\n\r\n/> 
+arr_end: 	.ascii </>
